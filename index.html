@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SportGest">
+<meta name="theme-color" content="#2563eb">
+<title>SportGest Alzira</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="top">
+  <div class="logo">Sport<b>Gest</b> <span style="font-weight:400;font-size:11px;color:#bbb">Alzira</span></div>
+  <div class="tr">
+    <input class="sbx" placeholder="Buscar..." id="sbx" oninput="render()">
+    <button class="btn bg" onclick="printWeek()">🖶 Planilla</button>
+    <button class="btn bg" onclick="openPrintMes()" style="background:#7c3aed;border-color:#7c3aed;color:#fff">📅 Planilla periodo</button>
+    <button class="btn bg" onclick="openJornada()" style="background:#0891b2;border-color:#0891b2;color:#fff">👤 Jornada trabajador</button>
+    <button class="btn bg" onclick="openNomina()" style="background:#15803d;border-color:#15803d;color:#fff">💶 Nómina</button>
+    <button class="btn bg" onclick="xlsSemana()">📊 Excel semana</button>
+    <button class="btn bg" onclick="xlsMes()">📅 Excel mes</button>
+    <button class="btn bs" onclick="backup()">↓ Backup JSON</button>
+    <button class="btn bp" onclick="guardarHTML()" style="background:#059669;border-color:#059669">💾 Guardar HTML</button>
+    <label class="btn bs" style="cursor:pointer">↑ Importar JSON<input type="file" accept=".json" style="display:none" onchange="importar(event)"></label>
+    <label class="btn bs" style="cursor:pointer;background:#fefce8;color:#854d0e;border-color:#ca8a04">📄 Importar Excel<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarExcel(event)"></label>
+    <button class="btn bs" onclick="resetear()">↻ Reset</button>
+    <button class="btn bs" onclick="oCfg()">⚙ Config</button>
+    <button class="btn bp" onclick="oModal()">+ Actividad</button>
+    <button class="btn bs" onclick="sgLogout()" style="background:#fef2f2;color:#b91c1c;border-color:#fca5a5">⎋ Salir</button>
+  </div>
+</div>
+
+<div class="bk-bar">
+  <div style="display:flex;align-items:center;gap:6px">
+    <div class="bk-dot ok" id="bk-dot"></div>
+    <span id="bk-txt">Auto-guardado OK</span>
+  </div>
+  <span class="bk-info" id="bk-last">17:27</span>
+  <div style="margin-left:auto;display:flex;gap:7px;align-items:center">
+    <span class="bk-info" id="sg-cloud" style="font-weight:600">☁ —</span>
+    <span class="bk-info" id="bk-count">1067 actividades · 124 guardados</span>
+    <button class="bk-btn dl" onclick="backup()">↓ Backup JSON</button>
+  </div>
+</div>
+<div class="bk-prog" id="bk-prog"></div>
+<div class="pwa-install" id="pwa-install">
+  <span style="flex:1">📲 <b>Instala SportGest</b> como app para acceder desde el dock sin abrir el navegador</span>
+  <button class="pwa-yes" onclick="pwaInstall()">Instalar</button>
+  <button class="pwa-no" onclick="pwaDismiss()">Ahora no</button>
+</div>
+
+<div class="bar">
+  <div class="wnav">
+    <button onclick="semana(-1)">‹</button>
+    <span class="wlbl" id="wlbl">23/3 - 29/3 2026</span>
+    <button onclick="semana(1)">›</button>
+    <button class="btn bs" onclick="hoy()" style="font-size:11px;padding:3px 8px">Hoy</button>
+  </div>
+  <div class="tabs" id="tabs"><button class="tab hv" onclick="setDia(0)">Lun</button><button class="tab on hv" onclick="setDia(1)">Mar</button><button class="tab hv" onclick="setDia(2)">Mie</button><button class="tab hv" onclick="setDia(3)">Jue</button><button class="tab hv" onclick="setDia(4)">Vie</button><button class="tab hv" onclick="setDia(5)">Sab</button><button class="tab hv" onclick="setDia(6)">Dom</button></div>
+  <select class="fs" id="fce" onchange="render()"><option value="">Todos centros</option></select>
+  <select class="fs" id="fmo" onchange="render()"><option value="">Todos monitores</option></select>
+</div>
+
+<div class="sbar" id="stats"><div class="sc"><div class="scl">Actividades</div><div class="scv">9</div><div class="scs">Martes</div></div><div class="sc"><div class="scl">Monitores</div><div class="scv">5</div><div class="scs">asignados</div></div><div class="sc"><div class="scl">A cubrir</div><div class="scv" style="color:#16a34a">0</div><div class="scs">ok</div></div><div class="sc"><div class="scl">Semana</div><div class="scv" style="font-size:13px">23/3-29/3</div><div class="scs">2026</div></div></div>
+<div class="lbar" id="lbar"><span style="font-size:10px;font-weight:700;color:#aaa">ACT:</span><div class="li"><div class="ld" style="background:#dbeafe;border:1px solid #2563eb"></div>Pádel A</div><div class="li"><div class="ld" style="background:#dbeafe;border:1px solid #2563eb"></div>Pádel B</div><div class="li"><div class="ld" style="background:#dbeafe;border:1px solid #2563eb"></div>Pádel</div><div class="li"><div class="ld" style="background:#dcfce7;border:1px solid #16a34a"></div>Gym</div><div class="li"><div class="ld" style="background:#fef3c7;border:1px solid #d97706"></div>En Plena Forma</div><div class="li"><div class="ld" style="background:#f3e8ff;border:1px solid #7c3aed"></div>Esport Salut</div><div class="li"><div class="ld" style="background:#fee2e2;border:1px solid #dc2626"></div>SOS</div><div class="li"><div class="ld" style="background:#e0f2fe;border:1px solid #0284c7"></div>Adult Apren.</div><div class="li"><div class="ld" style="background:#f1f5f9;border:1px solid #64748b"></div>Atención</div><div class="li"><div class="ld" style="background:#ffb5af;border:1px solid #ffb5af"></div>Natación</div><div class="li"><div class="ld" style="background:#fffc41;border:1px solid #fffc41"></div>Pilates</div></div>
+<div class="calwrap" id="cal"></div>
+
+<div class="ov" id="oev">
+<div class="modal">
+  <div class="mh" id="mh">Editar actividad<span class="rb">↻ recurrente</span></div>
+  <div class="fg"><label>Actividad</label><select id="fact"><option value="PADEL A">Pádel A</option><option value="PADEL B">Pádel B</option><option value="PADEL">Pádel</option><option value="GYM">Gym</option><option value="EN PLENA FORMA">En Plena Forma</option><option value="ESPORT SALUT">Esport Salut</option><option value="SOS">SOS</option><option value="ADULT APREN">Adult Apren.</option><option value="ATENCION USUARIOS">Atención</option><option value="NATACIÓN">Natación</option><option value="PILATES">Pilates</option><option value="GAP">Gap</option><option value="TRX">Trx</option></select></div>
+  <div class="r2">
+    <div class="fg"><label>Inicio</label><input type="time" id="fini" step="900"></div>
+    <div class="fg"><label>Fin</label><input type="time" id="ffin" step="900"></div>
+  </div>
+  <div class="fg"><label>Centro</label><select id="fcen"></select></div>
+  <div class="fg"><label>Monitor</label><select id="fmon" onchange="chk()"></select></div>
+  <div class="fg">
+    <label>Nota <span style="font-weight:500;color:#bbb;text-transform:none;font-size:10px">(max 5 palabras)</span></label>
+    <input type="text" id="fnot" placeholder="nivel iniciacion, sustitucion..." maxlength="60" oninput="ucc()">
+    <div class="cc" id="cc">0 palabras</div>
+  </div>
+  <div class="fg">
+    <label>Repetir</label>
+    <select id="frep">
+      <option value="no">Solo este dia</option>
+      <option value="si" selected="">Cada semana (3 meses)</option>
+    </select>
+  </div>
+  <div class="warn" id="warn" style="display: none;">⚠ Este monitor ya tiene actividad en este horario.</div>
+  <div class="mr">
+    <button class="btn bd" id="bdel" onclick="delEv()" style="display: inline-block; margin-right: auto;">Eliminar</button>
+    <button class="btn bs" onclick="cModal()">Cancelar</button>
+    <button class="btn bp" onclick="guardar()">Guardar</button>
+  </div>
+</div>
+</div>
+
+<div class="ov" id="ocfg">
+<div class="modal" style="width:490px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div class="mh" style="margin:0">Configuracion</div>
+    <button class="btn bs" onclick="cCfg()">Cerrar</button>
+  </div>
+  <div style="display:flex;gap:3px;background:#f0f0f0;border-radius:8px;padding:3px;margin-bottom:11px">
+    <button class="cft on" id="cta" onclick="stab('a')">Actividades</button>
+    <button class="cft" id="ctm" onclick="stab('m')">Monitores</button>
+    <button class="cft" id="ctc" onclick="stab('c')">Centros</button>
+  </div>
+  <div id="cpa">
+    <div id="la" style="max-height:175px;overflow-y:auto;margin-bottom:9px"><div class="ci"><div class="cd" style="background:#dbeafe;border:1px solid #2563eb"></div><span class="cn">Pádel A</span><span class="csb">PADEL A</span><button class="cx" onclick="dAct(0)">×</button></div><div class="ci"><div class="cd" style="background:#dbeafe;border:1px solid #2563eb"></div><span class="cn">Pádel B</span><span class="csb">PADEL B</span><button class="cx" onclick="dAct(1)">×</button></div><div class="ci"><div class="cd" style="background:#dbeafe;border:1px solid #2563eb"></div><span class="cn">Pádel</span><span class="csb">PADEL</span><button class="cx" onclick="dAct(2)">×</button></div><div class="ci"><div class="cd" style="background:#dcfce7;border:1px solid #16a34a"></div><span class="cn">Gym</span><span class="csb">GYM</span><button class="cx" onclick="dAct(3)">×</button></div><div class="ci"><div class="cd" style="background:#fef3c7;border:1px solid #d97706"></div><span class="cn">En Plena Forma</span><span class="csb">EN PLENA FORMA</span><button class="cx" onclick="dAct(4)">×</button></div><div class="ci"><div class="cd" style="background:#f3e8ff;border:1px solid #7c3aed"></div><span class="cn">Esport Salut</span><span class="csb">ESPORT SALUT</span><button class="cx" onclick="dAct(5)">×</button></div><div class="ci"><div class="cd" style="background:#fee2e2;border:1px solid #dc2626"></div><span class="cn">SOS</span><span class="csb">SOS</span><button class="cx" onclick="dAct(6)">×</button></div><div class="ci"><div class="cd" style="background:#e0f2fe;border:1px solid #0284c7"></div><span class="cn">Adult Apren.</span><span class="csb">ADULT APREN</span><button class="cx" onclick="dAct(7)">×</button></div><div class="ci"><div class="cd" style="background:#f1f5f9;border:1px solid #64748b"></div><span class="cn">Atención</span><span class="csb">ATENCION USUARIOS</span><button class="cx" onclick="dAct(8)">×</button></div><div class="ci"><div class="cd" style="background:#ffb5af;border:1px solid #ffb5af"></div><span class="cn">Natación</span><span class="csb">NATACIÓN</span><button class="cx" onclick="dAct(9)">×</button></div><div class="ci"><div class="cd" style="background:#fffc41;border:1px solid #fffc41"></div><span class="cn">Pilates</span><span class="csb">PILATES</span><button class="cx" onclick="dAct(10)">×</button></div><div class="ci"><div class="cd" style="background:#00f900;border:1px solid #00f900"></div><span class="cn">Gap</span><span class="csb">GAP</span><button class="cx" onclick="dAct(11)">×</button></div><div class="ci"><div class="cd" style="background:#ff4013;border:1px solid #ff4013"></div><span class="cn">Trx</span><span class="csb">TRX</span><button class="cx" onclick="dAct(12)">×</button></div></div>
+    <div style="display:grid;grid-template-columns:1fr 38px auto;gap:7px;align-items:end">
+      <div class="fg" style="margin:0"><label>Nombre</label><input id="na" placeholder="YOGA..."></div>
+      <div class="fg" style="margin:0"><label>Color</label><input type="color" id="nac" value="#dbeafe" style="width:38px;height:32px;padding:2px;border:1px solid #ddd;border-radius:6px;cursor:pointer"></div>
+      <button class="btn bp" onclick="aAct()" style="height:32px;font-size:13px">+</button>
+    </div>
+  </div>
+  <div id="cpm" style="display:none">
+    <div id="lm" style="max-height:175px;overflow-y:auto;margin-bottom:9px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:7px;align-items:end">
+      <div class="fg" style="margin:0"><label>Nombre</label><input id="nm" placeholder="Nombre completo"></div>
+      <div class="fg" style="margin:0"><label>Rol</label><input id="nmr" placeholder="Monitor padel..."></div>
+      <button class="btn bp" onclick="aMon()" style="height:32px;font-size:13px">+</button>
+    </div>
+  </div>
+  <div id="cpc" style="display:none">
+    <div id="lc" style="max-height:175px;overflow-y:auto;margin-bottom:9px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:7px;align-items:end">
+      <div class="fg" style="margin:0"><label>Clave</label><input id="nc" placeholder="PABELLON_SUR"></div>
+      <div class="fg" style="margin:0"><label>Nombre</label><input id="ncl" placeholder="Pabellon Sur"></div>
+      <button class="btn bp" onclick="aCen()" style="height:32px;font-size:13px">+</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast">Guardado en 12 semanas</div>
+<script src="data.js"></script>
+<script src="sync.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
