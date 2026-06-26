@@ -855,6 +855,10 @@ function openNomina(){
   html+='<div style="flex:1;min-width:120px">'+fld('Desde','<input type="date" id="nm-desde" value="'+d1+'" style="'+ist+'">')+'</div>';
   html+='<div style="flex:1;min-width:120px">'+fld('Hasta','<input type="date" id="nm-hasta" value="'+d2+'" style="'+ist+'">')+'</div>';
   html+='</div>';
+  html+='<div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:14px;flex-wrap:wrap;border-top:1px dashed #e2e8f0;padding-top:12px">';
+  html+='<div style="flex:2;min-width:200px">'+fld('Lote — trabajadores <span style="color:#bbb;font-weight:400">(ninguno = todos)</span>','<select id="nm-lote" multiple size="4" style="'+ist+'">'+opts+'</select>')+'</div>';
+  html+='<div style="flex:1;min-width:170px"><button onclick="calcNominaLote()" style="width:100%;padding:9px 16px;border:none;border-radius:6px;background:#0e7490;color:#fff;cursor:pointer;font-weight:600;font-size:13px">📋 Todas las nóminas del mes</button></div>';
+  html+='</div>';
   html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:6px">';
   html+=fld('SMI anual € <span style="color:#bbb;font-weight:400">(2026)</span>','<input type="number" id="nm-smi" value="17094" step="0.01" style="'+ist+'">');
   html+=fld('Horas/año jornada completa <span style="color:#bbb;font-weight:400">(convenio)</span>','<input type="number" id="nm-hmes" value="1752" step="1" style="'+ist+'">');
@@ -870,6 +874,27 @@ function openNomina(){
   html+='</div></div>';
   document.body.insertAdjacentHTML('beforeend',html);
 }
+function _nominaParams(){
+  var num=function(id,def){var v=parseFloat(document.getElementById(id).value);return isNaN(v)?def:v;};
+  return {smi:num('nm-smi',17094),hmes:num('nm-hmes',1752),pExtra:num('nm-extra',9),cEmp:num('nm-cemp',33.65),cTrab:num('nm-ctrab',6.50),pTrans:num('nm-trans',3),transOn:document.getElementById('nm-transon').checked,irpfPct:num('nm-irpf',0),irpfOn:document.getElementById('nm-irpfon').checked,semanal:parseFloat(document.getElementById('nm-hcontrato').value)};
+}
+function _nominaCalc(worker,desde,hasta,P){
+  var d=_jornadaData(worker,desde,hasta);
+  if(!d||d.totH<=0)return null;
+  var horas=d.totH;
+  var pContrato=P.hmes>0?P.smi/P.hmes:0;
+  var semanal=isNaN(P.semanal)?Infinity:P.semanal;
+  var hContrato=0,hExtra=0;
+  d.wkKeys.forEach(function(wk){var wh=d.weeks[wk].reduce(function(s,ev){return s+(toM(ev.e)-toM(ev.s));},0)/60;var c=Math.min(semanal,wh);hContrato+=c;hExtra+=wh-c;});
+  var plusT=P.transOn?(horas/8)*P.pTrans:0;
+  var brutoC=hContrato*pContrato,brutoE=hExtra*P.pExtra,bruto=brutoC+brutoE+plusT;
+  var cotEmp=bruto*P.cEmp/100,cotTrab=bruto*P.cTrab/100;
+  var irpf=P.irpfOn?bruto*P.irpfPct/100:0;
+  var costeEmpresa=bruto+cotEmp,neto=bruto-cotTrab-irpf;
+  return {worker:worker,horas:horas,nDias:d.nDias,nSem:d.wkKeys.length,hContrato:hContrato,hExtra:hExtra,pContrato:pContrato,brutoC:brutoC,brutoE:brutoE,plusT:plusT,bruto:bruto,cotEmp:cotEmp,cotTrab:cotTrab,irpf:irpf,costeEmpresa:costeEmpresa,neto:neto};
+}
+function _eurES(n){return n.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';}
+function _hES(n){return n.toFixed(1)+' h';}
 function calcNomina(){
   var res=document.getElementById('nm-res');
   var worker=document.getElementById('nm-mon').value;
@@ -877,30 +902,20 @@ function calcNomina(){
   var hasta=document.getElementById('nm-hasta').value;
   if(!worker||!desde||!hasta){res.innerHTML='<p style="color:#dc2626;font-size:13px">Selecciona trabajador y ambas fechas.</p>';return;}
   if(desde>hasta){res.innerHTML='<p style="color:#dc2626;font-size:13px">La fecha "Desde" debe ser anterior a "Hasta".</p>';return;}
-  var num=function(id,def){var v=parseFloat(document.getElementById(id).value);return isNaN(v)?def:v;};
-  var smi=num('nm-smi',17094),hmes=num('nm-hmes',1752),pExtra=num('nm-extra',9),cEmp=num('nm-cemp',33.65),cTrab=num('nm-ctrab',6.50);
-  var pTrans=num('nm-trans',3),transOn=document.getElementById('nm-transon').checked;
-  var irpfPct=num('nm-irpf',0),irpfOn=document.getElementById('nm-irpfon').checked;
-  var d=_jornadaData(worker,desde,hasta);
-  var horas=d?d.totH:0;
-  if(horas<=0){res.innerHTML='<p style="color:#999;font-size:13px">No hay horas registradas de '+worker+' en el periodo.</p>';return;}
-  var pContrato=hmes>0?smi/hmes:0;
-  var semanal=parseFloat(document.getElementById('nm-hcontrato').value);if(isNaN(semanal))semanal=Infinity;
-  var hContrato=0,hExtra=0;
-  d.wkKeys.forEach(function(wk){var wh=d.weeks[wk].reduce(function(s,ev){return s+(toM(ev.e)-toM(ev.s));},0)/60;var c=Math.min(semanal,wh);hContrato+=c;hExtra+=wh-c;});
-  var plusT=transOn?(horas/8)*pTrans:0;
-  var brutoC=hContrato*pContrato,brutoE=hExtra*pExtra,bruto=brutoC+brutoE+plusT;
-  var cotEmp=bruto*cEmp/100,cotTrab=bruto*cTrab/100;
-  var irpf=irpfOn?bruto*irpfPct/100:0;
-  var costeEmpresa=bruto+cotEmp,neto=bruto-cotTrab-irpf;
-  var eur=function(n){return n.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';};
-  var hh=function(n){return n.toFixed(1)+' h';};
+  var P=_nominaParams();
+  var r=_nominaCalc(worker,desde,hasta,P);
+  if(!r){res.innerHTML='<p style="color:#999;font-size:13px">No hay horas registradas de '+worker+' en el periodo.</p>';return;}
+  var smi=P.smi,hmes=P.hmes,pExtra=P.pExtra,cEmp=P.cEmp,cTrab=P.cTrab,pTrans=P.pTrans,transOn=P.transOn,irpfPct=P.irpfPct,irpfOn=P.irpfOn;
+  var semanal=isNaN(P.semanal)?Infinity:P.semanal;
+  var horas=r.horas,hContrato=r.hContrato,hExtra=r.hExtra,pContrato=r.pContrato,brutoC=r.brutoC,brutoE=r.brutoE,plusT=r.plusT,bruto=r.bruto,cotEmp=r.cotEmp,cotTrab=r.cotTrab,irpf=r.irpf,costeEmpresa=r.costeEmpresa,neto=r.neto;
+  var eur=_eurES;
+  var hh=_hES;
   var card=function(v,l,col){return '<div style="flex:1;min-width:120px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;text-align:center"><div style="font-size:19px;font-weight:800;color:'+(col||'#15803d')+';line-height:1">'+v+'</div><div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-top:4px">'+l+'</div></div>';};
   var row=function(l,v,strong){return '<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #f1f5f9'+(strong?';font-weight:700;color:#0f172a':'')+'"><span style="color:#475569">'+l+'</span><span style="white-space:nowrap">'+v+'</span></div>';};
   var html='<div style="display:flex;align-items:center;gap:10px;margin:14px 0 10px"><div style="width:32px;height:32px;border-radius:50%;background:#15803d;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">'+worker.charAt(0).toUpperCase()+'</div><div style="font-size:15px;font-weight:700;color:#0f172a">'+worker+'</div></div>';
   html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+card(eur(bruto),'Bruto total')+card(eur(costeEmpresa),'Coste empresa','#b45309')+card(eur(neto),'Neto estimado','#0891b2')+'</div>';
   html+='<div style="background:#fafafa;border:1px solid #eee;border-radius:10px;padding:10px 14px;font-size:12px">';
-  html+=row('Horas reales del periodo',hh(horas)+' · '+d.nDias+' días · '+d.wkKeys.length+' sem.');
+  html+=row('Horas reales del periodo',hh(horas)+' · '+r.nDias+' días · '+r.nSem+' sem.');
   html+=row('Salario base ('+hh(hContrato)+' contrato × '+eur(pContrato)+'/h)',eur(brutoC));
   html+=row('Horas extra × '+eur(pExtra)+'/h',hh(hExtra)+' → '+eur(brutoE));
   if(transOn)html+=row('Plus transporte ('+hh(horas)+' ÷ 8 × '+eur(pTrans)+')',eur(plusT));
@@ -915,6 +930,64 @@ function calcNomina(){
   html+='</div>';
   html+='<p style="font-size:10.5px;color:#94a3b8;margin-top:10px;line-height:1.5">Estimación orientativa. Reparto por semana ('+(isFinite(semanal)?semanal+' h/sem a contrato, exceso → extra':'todas a contrato')+'). Precio/hora contrato = SMI 17.094 €/año ÷ '+hmes+' h = '+eur(pContrato)+'/h. Cotización empresa 33,65% (CC 23,60 + MEI 0,75 + AT/EP 3,00 + desempleo 5,50 + FP 0,60 + FOGASA 0,20); trabajador 6,50% (CC 4,70 + MEI 0,15 + FP 0,10 + desempleo 1,55), según nómina de la gestoría — AT/EP y desempleo varían por actividad/contrato. El IRPF se aplica solo si marcas la casilla. No incluye prorrata de pagas extra.</p>';
   res.innerHTML=html;
+}
+
+// ============================================================
+// NÓMINA POR LOTES (todas las del mes)
+// ============================================================
+var _loteCache=null;
+function calcNominaLote(){
+  var res=document.getElementById('nm-res');
+  var desde=document.getElementById('nm-desde').value;
+  var hasta=document.getElementById('nm-hasta').value;
+  if(!desde||!hasta){res.innerHTML='<p style="color:#dc2626;font-size:13px">Selecciona ambas fechas.</p>';return;}
+  if(desde>hasta){res.innerHTML='<p style="color:#dc2626;font-size:13px">La fecha "Desde" debe ser anterior a "Hasta".</p>';return;}
+  var P=_nominaParams();
+  var sel=document.getElementById('nm-lote'),lista=[];
+  if(sel){for(var i=0;i<sel.options.length;i++){if(sel.options[i].selected)lista.push(sel.options[i].value);}}
+  if(!lista.length)lista=cfg.monitors.map(function(m){return m.name;});
+  var rows=lista.map(function(w){return _nominaCalc(w,desde,hasta,P);}).filter(Boolean);
+  rows.sort(function(a,b){return b.bruto-a.bruto;});
+  if(!rows.length){res.innerHTML='<p style="color:#999;font-size:13px">No hay horas registradas en el periodo para los trabajadores seleccionados.</p>';return;}
+  var tot={horas:0,hContrato:0,hExtra:0,brutoC:0,brutoE:0,plusT:0,bruto:0,costeEmpresa:0,cotTrab:0,irpf:0,neto:0};
+  rows.forEach(function(r){for(var k in tot)tot[k]+=r[k];});
+  _loteCache={rows:rows,total:tot,desde:desde,hasta:hasta,P:P};
+  res.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0 8px;flex-wrap:wrap"><div style="font-size:14px;font-weight:700;color:#0f172a">📋 Nóminas del periodo '+desde+' → '+hasta+' <span style="font-weight:500;color:#999">('+rows.length+' trab.)</span></div><button onclick="nominaLotePrint()" style="padding:8px 16px;border:1px solid #0e7490;border-radius:6px;background:#fff;color:#0e7490;cursor:pointer;font-weight:600;font-size:12px">🖶 Imprimir / PDF</button></div>'+_loteTablaHTML(rows,tot,P)+_loteNotaHTML(P);
+}
+function _loteTablaHTML(rows,tot,P){
+  var eur=_eurES,hh=_hES;
+  var th='padding:6px 8px;font-size:10px;font-weight:700;text-align:right;border-bottom:2px solid #cbd5e1;white-space:nowrap';
+  var thL='padding:6px 8px;font-size:10px;font-weight:700;text-align:left;border-bottom:2px solid #cbd5e1';
+  var td='padding:5px 8px;font-size:11px;text-align:right;border-bottom:1px solid #eef2f7;white-space:nowrap';
+  var tdL='padding:5px 8px;font-size:11px;text-align:left;border-bottom:1px solid #eef2f7;font-weight:600';
+  var tdt='padding:7px 8px;font-size:11px;text-align:right;border-top:2px solid #cbd5e1;font-weight:800;white-space:nowrap';
+  var h='<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:900px"><thead><tr>';
+  h+='<th style="'+thL+'">Trabajador</th><th style="'+th+'">Horas</th><th style="'+th+'">H.Contr.</th><th style="'+th+'">H.Extra</th><th style="'+th+'">Salario base</th><th style="'+th+'">Extra €</th><th style="'+th+'">Transporte</th><th style="'+th+';color:#15803d">BRUTO</th><th style="'+th+';color:#b45309">Coste empresa</th><th style="'+th+'">Cotiz. trab.</th><th style="'+th+'">IRPF</th><th style="'+th+';color:#0891b2">NETO</th>';
+  h+='</tr></thead><tbody>';
+  rows.forEach(function(r){
+    h+='<tr><td style="'+tdL+'">'+r.worker+'</td><td style="'+td+'">'+hh(r.horas)+'</td><td style="'+td+'">'+hh(r.hContrato)+'</td><td style="'+td+'">'+hh(r.hExtra)+'</td><td style="'+td+'">'+eur(r.brutoC)+'</td><td style="'+td+'">'+eur(r.brutoE)+'</td><td style="'+td+'">'+eur(r.plusT)+'</td><td style="'+td+';font-weight:700;color:#15803d">'+eur(r.bruto)+'</td><td style="'+td+';color:#b45309">'+eur(r.costeEmpresa)+'</td><td style="'+td+'">'+eur(r.cotTrab)+'</td><td style="'+td+'">'+eur(r.irpf)+'</td><td style="'+td+';font-weight:700;color:#0891b2">'+eur(r.neto)+'</td></tr>';
+  });
+  h+='<tr style="background:#f8fafc"><td style="'+tdt+';text-align:left">TOTAL ('+rows.length+')</td><td style="'+tdt+'">'+hh(tot.horas)+'</td><td style="'+tdt+'">'+hh(tot.hContrato)+'</td><td style="'+tdt+'">'+hh(tot.hExtra)+'</td><td style="'+tdt+'">'+eur(tot.brutoC)+'</td><td style="'+tdt+'">'+eur(tot.brutoE)+'</td><td style="'+tdt+'">'+eur(tot.plusT)+'</td><td style="'+tdt+';color:#15803d">'+eur(tot.bruto)+'</td><td style="'+tdt+';color:#b45309">'+eur(tot.costeEmpresa)+'</td><td style="'+tdt+'">'+eur(tot.cotTrab)+'</td><td style="'+tdt+'">'+eur(tot.irpf)+'</td><td style="'+tdt+';color:#0891b2">'+eur(tot.neto)+'</td></tr>';
+  h+='</tbody></table></div>';
+  return h;
+}
+function _loteNotaHTML(P){
+  var eur=_eurES,pContrato=P.hmes>0?P.smi/P.hmes:0;
+  return '<p style="font-size:10.5px;color:#94a3b8;margin-top:10px;line-height:1.5">Estimación orientativa, mismos parámetros para todos. Reparto por semana ('+(isNaN(P.semanal)?'todas a contrato':P.semanal+' h/sem a contrato, exceso → extra')+'). Precio/hora contrato = SMI '+eur(P.smi)+'/año ÷ '+P.hmes+' h = '+eur(pContrato)+'/h. Hora extra '+eur(P.pExtra)+'/h. '+(P.transOn?'Plus transporte '+eur(P.pTrans)+'/8 h. ':'Sin plus transporte. ')+'Cotización empresa '+P.cEmp+'%, trabajador '+P.cTrab+'%. '+(P.irpfOn?'IRPF '+P.irpfPct+'%.':'Sin IRPF.')+' No incluye prorrata de pagas extra.</p>';
+}
+function nominaLotePrint(){
+  if(!_loteCache){toast('Primero calcula el lote.');return;}
+  var c=_loteCache;
+  var win=window.open('','_blank','width=1000,height=760');
+  if(!win){toast('⚠ El navegador bloqueó la ventana. Permite ventanas emergentes para este sitio.');return;}
+  var css='*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;padding:20px;color:#0f172a}h1{font-size:17px;margin-bottom:2px}.su{font-size:11px;color:#888;margin-bottom:14px}.np{margin-bottom:14px}@media print{.np{display:none}body{padding:6px}}';
+  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Nóminas '+c.desde+' a '+c.hasta+'</title><style>'+css+'</style></head><body>');
+  win.document.write('<div class="np"><button onclick="window.print()" style="padding:6px 14px;background:#0e7490;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:6px;font-size:12px">Imprimir/PDF</button><button onclick="window.close()" style="padding:6px 14px;background:#fff;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:12px">Cerrar</button></div>');
+  win.document.write('<h1>SportGest Alzira — Nóminas estimadas</h1><p class="su">Periodo '+c.desde+' a '+c.hasta+' · '+c.rows.length+' trabajadores</p>');
+  win.document.write(_loteTablaHTML(c.rows,c.total,c.P));
+  win.document.write(_loteNotaHTML(c.P));
+  win.document.write('</body></html>');
+  win.document.close();
 }
 
 // ============================================================
