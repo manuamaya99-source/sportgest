@@ -880,18 +880,21 @@ function _nominaParams(){
 }
 function _nominaCalc(worker,desde,hasta,P){
   var d=_jornadaData(worker,desde,hasta);
-  if(!d||d.totH<=0)return null;
-  var horas=d.totH;
+  var hManual=(_nmManual[worker]>0)?_nmManual[worker]:0;   // horas fuera de planilla -> salario base
+  var horasPlan=d?d.totH:0;
+  if(horasPlan<=0&&hManual<=0)return null;
+  var horas=horasPlan+hManual;
   var pContrato=P.hmes>0?P.smi/P.hmes:0;
   var semanal=isNaN(P.semanal)?Infinity:P.semanal;
   var hContrato=0,hExtra=0;
-  d.wkKeys.forEach(function(wk){var wh=d.weeks[wk].reduce(function(s,ev){return s+(toM(ev.e)-toM(ev.s));},0)/60;var c=Math.min(semanal,wh);hContrato+=c;hExtra+=wh-c;});
-  var plusT=P.transOn?(horas/8)*P.pTrans:0;
-  var brutoC=hContrato*pContrato,brutoE=hExtra*P.pExtra,bruto=brutoC+brutoE+plusT;
+  if(d)d.wkKeys.forEach(function(wk){var wh=d.weeks[wk].reduce(function(s,ev){return s+(toM(ev.e)-toM(ev.s));},0)/60;var c=Math.min(semanal,wh);hContrato+=c;hExtra+=wh-c;});
+  hContrato+=hManual;                              // las horas manuales van íntegras al salario base
+  var plusT=P.transOn?(horasPlan/8)*P.pTrans:0;    // transporte solo por jornada real de planilla
+  var brutoC=hContrato*pContrato,brutoE=hExtra*P.pExtra,brutoSal=brutoC+brutoE,bruto=brutoSal+plusT;
   var cotEmp=bruto*P.cEmp/100,cotTrab=bruto*P.cTrab/100;
   var irpf=P.irpfOn?bruto*P.irpfPct/100:0;
   var costeEmpresa=bruto+cotEmp,neto=bruto-cotTrab-irpf;
-  return {worker:worker,horas:horas,nDias:d.nDias,nSem:d.wkKeys.length,hContrato:hContrato,hExtra:hExtra,pContrato:pContrato,brutoC:brutoC,brutoE:brutoE,plusT:plusT,bruto:bruto,cotEmp:cotEmp,cotTrab:cotTrab,irpf:irpf,costeEmpresa:costeEmpresa,neto:neto};
+  return {worker:worker,horas:horas,horasPlan:horasPlan,horasManual:hManual,nDias:d?d.nDias:0,nSem:d?d.wkKeys.length:0,hContrato:hContrato,hExtra:hExtra,pContrato:pContrato,brutoC:brutoC,brutoE:brutoE,brutoSal:brutoSal,plusT:plusT,bruto:bruto,cotEmp:cotEmp,cotTrab:cotTrab,irpf:irpf,costeEmpresa:costeEmpresa,neto:neto};
 }
 function _eurES(n){return n.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';}
 function _hES(n){return n.toFixed(1)+' h';}
@@ -915,7 +918,7 @@ function calcNomina(){
   var html='<div style="display:flex;align-items:center;gap:10px;margin:14px 0 10px"><div style="width:32px;height:32px;border-radius:50%;background:#15803d;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">'+worker.charAt(0).toUpperCase()+'</div><div style="font-size:15px;font-weight:700;color:#0f172a">'+worker+'</div></div>';
   html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+card(eur(bruto),'Bruto total')+card(eur(costeEmpresa),'Coste empresa','#b45309')+card(eur(neto),'Neto estimado','#0891b2')+'</div>';
   html+='<div style="background:#fafafa;border:1px solid #eee;border-radius:10px;padding:10px 14px;font-size:12px">';
-  html+=row('Horas reales del periodo',hh(horas)+' · '+r.nDias+' días · '+r.nSem+' sem.');
+  html+=row('Horas reales del periodo',hh(horas)+' · '+r.nDias+' días · '+r.nSem+' sem.'+(r.horasManual>0?' · incl. '+hh(r.horasManual)+' manuales':''));
   html+=row('Salario base ('+hh(hContrato)+' contrato × '+eur(pContrato)+'/h)',eur(brutoC));
   html+=row('Horas extra × '+eur(pExtra)+'/h',hh(hExtra)+' → '+eur(brutoE));
   if(transOn)html+=row('Plus transporte ('+hh(horas)+' ÷ 8 × '+eur(pTrans)+')',eur(plusT));
@@ -936,6 +939,7 @@ function calcNomina(){
 // NÓMINA POR LOTES (todas las del mes)
 // ============================================================
 var _loteCache=null;
+var _nmManual={};   // horas manuales fuera de planilla por trabajador {nombre:horas} -> se suman al salario base
 function calcNominaLote(){
   var res=document.getElementById('nm-res');
   var desde=document.getElementById('nm-desde').value;
@@ -949,10 +953,10 @@ function calcNominaLote(){
   var rows=lista.map(function(w){return _nominaCalc(w,desde,hasta,P);}).filter(Boolean);
   rows.sort(function(a,b){return b.bruto-a.bruto;});
   if(!rows.length){res.innerHTML='<p style="color:#999;font-size:13px">No hay horas registradas en el periodo para los trabajadores seleccionados.</p>';return;}
-  var tot={horas:0,hContrato:0,hExtra:0,brutoC:0,brutoE:0,plusT:0,bruto:0,costeEmpresa:0,cotTrab:0,irpf:0,neto:0};
+  var tot={horas:0,hContrato:0,hExtra:0,brutoC:0,brutoE:0,brutoSal:0,plusT:0,bruto:0,costeEmpresa:0,cotTrab:0,irpf:0,neto:0};
   rows.forEach(function(r){for(var k in tot)tot[k]+=r[k];});
   _loteCache={rows:rows,total:tot,desde:desde,hasta:hasta,P:P};
-  res.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0 8px;flex-wrap:wrap"><div style="font-size:14px;font-weight:700;color:#0f172a">📋 Nóminas del periodo '+desde+' → '+hasta+' <span style="font-weight:500;color:#999">('+rows.length+' trab.)</span></div><button onclick="nominaLotePrint()" style="padding:8px 16px;border:1px solid #0e7490;border-radius:6px;background:#fff;color:#0e7490;cursor:pointer;font-weight:600;font-size:12px">🖶 Imprimir / PDF</button></div>'+_loteTablaHTML(rows,tot,P)+_loteNotaHTML(P);
+  res.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0 8px;flex-wrap:wrap"><div style="font-size:14px;font-weight:700;color:#0f172a">📋 Nóminas del periodo '+desde+' → '+hasta+' <span style="font-weight:500;color:#999">('+rows.length+' trab.)</span></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button onclick="nominaGestoriaPrint()" style="padding:8px 16px;border:1px solid #b45309;border-radius:6px;background:#fff;color:#b45309;cursor:pointer;font-weight:600;font-size:12px">🧾 Nóminas gestoría</button><button onclick="nominaLotePrint()" style="padding:8px 16px;border:1px solid #0e7490;border-radius:6px;background:#fff;color:#0e7490;cursor:pointer;font-weight:600;font-size:12px">🖶 Imprimir / PDF</button></div></div>'+_loteTablaHTML(rows,tot,P)+_nmManualPanel()+_loteNotaHTML(P);
 }
 function _loteTablaHTML(rows,tot,P){
   var eur=_eurES,hh=_hES;
@@ -965,7 +969,7 @@ function _loteTablaHTML(rows,tot,P){
   h+='<th style="'+thL+'">Trabajador</th><th style="'+th+'">Horas</th><th style="'+th+'">H.Contr.</th><th style="'+th+'">H.Extra</th><th style="'+th+'">Salario base</th><th style="'+th+'">Extra €</th><th style="'+th+'">Transporte</th><th style="'+th+';color:#15803d">BRUTO</th><th style="'+th+';color:#b45309">Coste empresa</th><th style="'+th+'">Cotiz. trab.</th><th style="'+th+'">IRPF</th><th style="'+th+';color:#0891b2">NETO</th>';
   h+='</tr></thead><tbody>';
   rows.forEach(function(r){
-    h+='<tr><td style="'+tdL+'">'+r.worker+'</td><td style="'+td+'">'+hh(r.horas)+'</td><td style="'+td+'">'+hh(r.hContrato)+'</td><td style="'+td+'">'+hh(r.hExtra)+'</td><td style="'+td+'">'+eur(r.brutoC)+'</td><td style="'+td+'">'+eur(r.brutoE)+'</td><td style="'+td+'">'+eur(r.plusT)+'</td><td style="'+td+';font-weight:700;color:#15803d">'+eur(r.bruto)+'</td><td style="'+td+';color:#b45309">'+eur(r.costeEmpresa)+'</td><td style="'+td+'">'+eur(r.cotTrab)+'</td><td style="'+td+'">'+eur(r.irpf)+'</td><td style="'+td+';font-weight:700;color:#0891b2">'+eur(r.neto)+'</td></tr>';
+    h+='<tr><td style="'+tdL+'">'+r.worker+(r.horasManual>0?' <span style="font-weight:600;color:#d97706;font-size:9px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:1px 4px;white-space:nowrap">+'+_hES(r.horasManual)+' man.</span>':'')+'</td><td style="'+td+'">'+hh(r.horas)+'</td><td style="'+td+'">'+hh(r.hContrato)+'</td><td style="'+td+'">'+hh(r.hExtra)+'</td><td style="'+td+'">'+eur(r.brutoC)+'</td><td style="'+td+'">'+eur(r.brutoE)+'</td><td style="'+td+'">'+eur(r.plusT)+'</td><td style="'+td+';font-weight:700;color:#15803d">'+eur(r.bruto)+'</td><td style="'+td+';color:#b45309">'+eur(r.costeEmpresa)+'</td><td style="'+td+'">'+eur(r.cotTrab)+'</td><td style="'+td+'">'+eur(r.irpf)+'</td><td style="'+td+';font-weight:700;color:#0891b2">'+eur(r.neto)+'</td></tr>';
   });
   h+='<tr style="background:#f8fafc"><td style="'+tdt+';text-align:left">TOTAL ('+rows.length+')</td><td style="'+tdt+'">'+hh(tot.horas)+'</td><td style="'+tdt+'">'+hh(tot.hContrato)+'</td><td style="'+tdt+'">'+hh(tot.hExtra)+'</td><td style="'+tdt+'">'+eur(tot.brutoC)+'</td><td style="'+tdt+'">'+eur(tot.brutoE)+'</td><td style="'+tdt+'">'+eur(tot.plusT)+'</td><td style="'+tdt+';color:#15803d">'+eur(tot.bruto)+'</td><td style="'+tdt+';color:#b45309">'+eur(tot.costeEmpresa)+'</td><td style="'+tdt+'">'+eur(tot.cotTrab)+'</td><td style="'+tdt+'">'+eur(tot.irpf)+'</td><td style="'+tdt+';color:#0891b2">'+eur(tot.neto)+'</td></tr>';
   h+='</tbody></table></div>';
@@ -986,6 +990,65 @@ function nominaLotePrint(){
   win.document.write('<h1>SportGest Alzira — Nóminas estimadas</h1><p class="su">Periodo '+c.desde+' a '+c.hasta+' · '+c.rows.length+' trabajadores</p>');
   win.document.write(_loteTablaHTML(c.rows,c.total,c.P));
   win.document.write(_loteNotaHTML(c.P));
+  win.document.write('</body></html>');
+  win.document.close();
+}
+
+// --- Horas manuales (fuera de planilla) que se suman al salario base ---
+function _nmManualPanel(){
+  var ist='padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px';
+  var opts=cfg.monitors.map(function(m){var n=m.name.replace(/"/g,'&quot;');return '<option value="'+n+'">'+m.name+'</option>';}).join('');
+  var keys=Object.keys(_nmManual).filter(function(w){return _nmManual[w]>0;});
+  var chips='';
+  if(keys.length){
+    chips='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">'+keys.map(function(w){
+      return '<span style="display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid #fcd34d;border-radius:20px;padding:3px 5px 3px 11px;font-size:11px;font-weight:600;color:#92400e">'+w+' · +'+_hES(_nmManual[w])
+        +'<button onclick="nmDelManual(\''+w.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')" title="Quitar" style="border:none;background:#fde68a;color:#92400e;border-radius:50%;width:18px;height:18px;cursor:pointer;font-weight:700;line-height:1">×</button></span>';
+    }).join('')+'</div>';
+  }
+  return '<div style="border:1px dashed #fcd34d;border-radius:10px;padding:12px 14px;margin-top:14px;background:#fffbeb">'
+    +'<div style="font-weight:700;font-size:12px;color:#92400e;margin-bottom:9px">➕ Añadir horas manuales (fuera de planilla) <span style="font-weight:400;color:#b45309">— se suman al salario base</span></div>'
+    +'<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">'
+    +'<div style="flex:2;min-width:160px"><select id="nm-man-mon" style="width:100%;box-sizing:border-box;'+ist+'">'+opts+'</select></div>'
+    +'<div style="flex:1;min-width:110px"><input type="number" id="nm-man-h" step="0.5" min="0" placeholder="Horas" style="width:100%;box-sizing:border-box;'+ist+'"></div>'
+    +'<button onclick="nmAddManual()" style="padding:9px 16px;border:none;border-radius:6px;background:#d97706;color:#fff;cursor:pointer;font-weight:600;font-size:13px;white-space:nowrap">Añadir / actualizar</button>'
+    +'</div>'+chips+'</div>';
+}
+function nmAddManual(){
+  var w=document.getElementById('nm-man-mon').value;
+  var h=parseFloat(document.getElementById('nm-man-h').value);
+  if(!w){toast('Selecciona un trabajador.');return;}
+  if(isNaN(h)||h<0){toast('Introduce un nº de horas válido.');return;}
+  if(h===0)delete _nmManual[w]; else _nmManual[w]=h;
+  toast(h>0?'+'+_hES(h)+' a '+w:'Horas manuales de '+w+' eliminadas');
+  calcNominaLote();
+}
+function nmDelManual(w){delete _nmManual[w];calcNominaLote();}
+
+// --- Resumen para la gestoría: solo horas totales, plus transporte y salario bruto ---
+function nominaGestoriaPrint(){
+  if(!_loteCache){toast('Primero calcula el lote.');return;}
+  var c=_loteCache,eur=_eurES,hh=_hES;
+  var win=window.open('','_blank','width=820,height=760');
+  if(!win){toast('⚠ El navegador bloqueó la ventana. Permite ventanas emergentes para este sitio.');return;}
+  var css='*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;padding:22px;color:#0f172a}'
+    +'h1{font-size:17px;margin-bottom:2px}.su{font-size:11px;color:#888;margin-bottom:16px}'
+    +'table{border-collapse:collapse;width:100%}'
+    +'th{font-size:11px;font-weight:700;padding:7px 10px;border-bottom:2px solid #cbd5e1}'
+    +'td{font-size:12px;padding:6px 10px;border-bottom:1px solid #eef2f7}'
+    +'.l{text-align:left}.r{text-align:right;white-space:nowrap}'
+    +'tfoot td{font-weight:800;border-top:2px solid #cbd5e1;border-bottom:none}'
+    +'.np{margin-bottom:14px}@media print{.np{display:none}body{padding:8px}}';
+  var rowsH=c.rows.map(function(r){
+    return '<tr><td class="l">'+r.worker+'</td><td class="r">'+hh(r.horas)+'</td><td class="r">'+eur(r.plusT)+'</td><td class="r">'+eur(r.brutoSal)+'</td></tr>';
+  }).join('');
+  var t=c.total;
+  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Nóminas gestoría '+c.desde+' a '+c.hasta+'</title><style>'+css+'</style></head><body>');
+  win.document.write('<div class="np"><button onclick="window.print()" style="padding:6px 14px;background:#b45309;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:6px;font-size:12px">Imprimir/PDF</button><button onclick="window.close()" style="padding:6px 14px;background:#fff;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:12px">Cerrar</button></div>');
+  win.document.write('<h1>SportGest Alzira — Resumen para gestoría</h1><p class="su">Periodo '+c.desde+' a '+c.hasta+' · '+c.rows.length+' trabajadores</p>');
+  win.document.write('<table><thead><tr><th class="l">Trabajador</th><th class="r">Horas totales</th><th class="r">Plus transporte</th><th class="r">Salario bruto</th></tr></thead><tbody>'+rowsH+'</tbody>'
+    +'<tfoot><tr><td class="l">TOTAL ('+c.rows.length+')</td><td class="r">'+hh(t.horas)+'</td><td class="r">'+eur(t.plusT)+'</td><td class="r">'+eur(t.brutoSal)+'</td></tr></tfoot></table>');
+  win.document.write('<p style="font-size:10.5px;color:#94a3b8;margin-top:14px;line-height:1.5">Salario bruto = salario base + horas extra (el plus transporte se detalla aparte y no está incluido en esa cifra). Las horas totales incluyen las horas manuales añadidas fuera de planilla.</p>');
   win.document.write('</body></html>');
   win.document.close();
 }
