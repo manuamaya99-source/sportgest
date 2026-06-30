@@ -415,13 +415,48 @@ function cCfg(){document.getElementById('ocfg').classList.remove('open');filtros
 function stab(t){['a','m','c'].forEach(function(x){document.getElementById('cp'+x).style.display=x===t?'block':'none';document.getElementById('ct'+x).classList.toggle('on',x===t);});}
 function rCfg(){
   document.getElementById('la').innerHTML=cfg.activities.map(function(a,i){return '<div class="ci"><div class="cd" style="background:'+a.color+';border:1px solid '+a.border+'"></div><span class="cn">'+a.label+'</span><span class="csb">'+a.id+'</span><button class="cx" onclick="dAct('+i+')">&#215;</button></div>';}).join('');
-  document.getElementById('lm').innerHTML=cfg.monitors.map(function(m,i){return '<div class="ci"><div class="cd" style="background:'+m.color+'"></div><span class="cn">'+m.name+'</span><span class="csb">'+m.role+'</span><button class="cx" onclick="dMon('+i+')">&#215;</button></div>';}).join('');
+  var _atr=function(s){return (''+(s||'')).replace(/&/g,'&amp;').replace(/"/g,'&quot;');};
+  document.getElementById('lm').innerHTML=cfg.monitors.map(function(m,i){
+    if(i===_editMon){
+      return '<div class="ci" style="gap:6px;align-items:center"><div class="cd" style="background:'+m.color+'"></div>'
+        +'<input id="em-name" value="'+_atr(m.name)+'" placeholder="Nombre y apellidos" onkeydown="if(event.key===\'Enter\')eMonSave('+i+');if(event.key===\'Escape\')eMonCancel()" style="flex:2;min-width:0;padding:5px 7px;border:1px solid #0891b2;border-radius:5px;font-size:12px">'
+        +'<input id="em-role" value="'+_atr(m.role)+'" placeholder="Rol" onkeydown="if(event.key===\'Enter\')eMonSave('+i+');if(event.key===\'Escape\')eMonCancel()" style="flex:1;min-width:0;padding:5px 7px;border:1px solid #ddd;border-radius:5px;font-size:12px">'
+        +'<button class="cx" onclick="eMonSave('+i+')" title="Guardar" style="color:#15803d;font-weight:700">&#10003;</button>'
+        +'<button class="cx" onclick="eMonCancel()" title="Cancelar">&#215;</button></div>';
+    }
+    return '<div class="ci"><div class="cd" style="background:'+m.color+'"></div><span class="cn">'+m.name+'</span><span class="csb">'+m.role+'</span>'
+      +'<button class="cx" onclick="eMon('+i+')" title="Renombrar" style="color:#0891b2;font-weight:700">&#9998;</button>'
+      +'<button class="cx" onclick="dMon('+i+')" title="Eliminar">&#215;</button></div>';
+  }).join('');
   document.getElementById('lc').innerHTML=cfg.centers.map(function(c,i){return '<div class="ci"><span class="cn">'+c.label+'</span><span class="csb">'+c.id+'</span><button class="cx" onclick="dCen('+i+')">&#215;</button></div>';}).join('');
 }
 function aAct(){var n=document.getElementById('na').value.trim().toUpperCase(),col=document.getElementById('nac').value;if(!n){alert('Escribe el nombre.');return;}if(cfg.activities.find(function(a){return a.id===n;})){alert('Ya existe.');return;}cfg.activities.push({id:n,label:n.charAt(0)+n.slice(1).toLowerCase(),color:col,border:col,text:'#1a1a1a'});saveCfg();document.getElementById('na').value='';rCfg();toast('"'+n+'" anadida');}
 function dAct(i){if(!confirm('Eliminar?'))return;cfg.activities.splice(i,1);saveCfg();rCfg();}
 function aMon(){var n=document.getElementById('nm').value.trim(),r=document.getElementById('nmr').value.trim()||'Monitor';if(!n){alert('Escribe el nombre.');return;}if(cfg.monitors.find(function(m){return m.name===n;})){alert('Ya existe.');return;}cfg.monitors.push({name:n,role:r,color:BCOLS[cfg.monitors.length%BCOLS.length]});saveCfg();document.getElementById('nm').value='';document.getElementById('nmr').value='';rCfg();toast('"'+n+'" anadido');}
 function dMon(i){if(!confirm('Eliminar?'))return;cfg.monitors.splice(i,1);saveCfg();rCfg();}
+// --- Renombrar trabajador (nombre y apellidos) migrando las actividades antiguas ---
+var _editMon=-1;
+function eMon(i){_editMon=i;rCfg();var el=document.getElementById('em-name');if(el){el.focus();el.select();}}
+function eMonCancel(){_editMon=-1;rCfg();}
+function eMonSave(i){
+  var m=cfg.monitors[i];if(!m)return;
+  var nn=document.getElementById('em-name').value.trim();
+  var nr=document.getElementById('em-role').value.trim()||'Monitor';
+  if(!nn){alert('Escribe el nombre.');return;}
+  if(cfg.monitors.some(function(x,j){return j!==i&&x.name===nn;})){alert('Ya existe un trabajador con ese nombre.');return;}
+  var oldName=m.name,n=0;
+  if(nn!==oldName){
+    n=events.filter(function(e){return e.worker===oldName;}).length;
+    if(n>0&&!confirm('Renombrar "'+oldName+'" → "'+nn+'".\nSe actualizarán '+n+' actividades antiguas para mantenerlas asignadas a este trabajador.\n\n¿Continuar?'))return;
+    events.forEach(function(e){if(e.worker===oldName)e.worker=nn;});
+    if(typeof _nmManual!=='undefined'&&_nmManual[oldName]!=null){_nmManual[nn]=_nmManual[oldName];delete _nmManual[oldName];}
+  }
+  m.name=nn;m.role=nr;
+  _editMon=-1;
+  autoSave();
+  rCfg();
+  toast(n>0?'Renombrado · '+n+' actividades actualizadas':'Trabajador actualizado');
+}
 function aCen(){var id=document.getElementById('nc').value.trim().toUpperCase().replace(/\s+/g,'_'),lbl=document.getElementById('ncl').value.trim()||id;if(!id){alert('Escribe la clave.');return;}if(cfg.centers.find(function(c){return c.id===id;})){alert('Ya existe.');return;}cfg.centers.push({id:id,label:lbl});saveCfg();document.getElementById('nc').value='';document.getElementById('ncl').value='';rCfg();toast('"'+lbl+'" anadido');}
 function dCen(i){if(!confirm('Eliminar?'))return;cfg.centers.splice(i,1);saveCfg();rCfg();}
 
