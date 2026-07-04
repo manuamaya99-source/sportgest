@@ -58,6 +58,10 @@ function addD(d,n){return new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);}
 function monOf(d){var w=d.getDay();return new Date(d.getFullYear(),d.getMonth(),d.getDate()+(w===0?-6:1-w));}
 function toM(t){var p=t.split(':');return +p[0]*60+ +p[1];}
 function fM(m){return ('0'+Math.floor(m/60)).slice(-2)+':'+('0'+(m%60)).slice(-2);}
+// Duración en MINUTOS -> "1h 30min" / "8h" / "15min" / "0h"
+function fHm(min){var s=min<0?'-':'';min=Math.abs(Math.round(min));var h=Math.floor(min/60),m=min%60;var o=h&&m?h+'h '+m+'min':h?h+'h':m?m+'min':'0h';return s+o;}
+// Duración en HORAS decimales -> mismo formato
+function fH(h){return fHm(Math.round((h||0)*60));}
 function npal(s){return s.trim()===''?0:s.trim().split(/\s+/).length;}
 function dHoy(){return ISO(addD(lunes,dia));}
 
@@ -601,7 +605,7 @@ function printWeek(){
   // Collect all named workers (exclude groups, placeholders)
   var allW=[];days.forEach(function(d){d.ev.forEach(function(ev){var u=ev.worker.toUpperCase();if(allW.indexOf(ev.worker)<0&&u.indexOf('CUBRIR')<0&&u.indexOf('PREPAR')<0&&u.indexOf('INF ')<0&&u.indexOf('INF.')<0&&u.indexOf('AD.')<0&&u.indexOf('AD ')<0&&u.indexOf('ATENCION')<0&&u.indexOf('ATENCIO')<0&&u.indexOf('GRUPO')<0)allW.push(ev.worker);});});allW.sort();
   // Section: Per monitor detail
-  var wb='';allW.forEach(function(w){var wev=[];days.forEach(function(d){d.ev.filter(function(ev){return ev.worker===w;}).forEach(function(ev){wev.push(Object.assign({},ev,{dn:d.n}));});});if(!wev.length)return;var tot=(wev.reduce(function(s,ev){return s+(toM(ev.e)-toM(ev.s));},0)/60).toFixed(1);wb+='<div class="db"><h2>'+w+' <em>'+tot+' h</em></h2><table><tr><th>Dia</th><th>Inicio</th><th>Fin</th><th>Actividad</th><th>Centro</th><th>Nota</th><th>Horas</th></tr>';wev.forEach(function(ev){var h=((toM(ev.e)-toM(ev.s))/60).toFixed(1);wb+='<tr><td>'+ev.dn+'</td><td>'+ev.s+'</td><td>'+ev.e+'</td><td>'+ev.act+'</td><td>'+cLbl(ev.center)+'</td><td class="nt">'+(ev.note||'')+'</td><td>'+h+'h</td></tr>';});wb+='</table></div>';});
+  var wb='';allW.forEach(function(w){var wev=[];days.forEach(function(d){d.ev.filter(function(ev){return ev.worker===w;}).forEach(function(ev){wev.push(Object.assign({},ev,{dn:d.n}));});});if(!wev.length)return;var tot=wev.reduce(function(s,ev){return s+(toM(ev.e)-toM(ev.s));},0);wb+='<div class="db"><h2>'+w+' <em>'+fHm(tot)+'</em></h2><table><tr><th>Dia</th><th>Inicio</th><th>Fin</th><th>Actividad</th><th>Centro</th><th>Nota</th><th>Horas</th></tr>';wev.forEach(function(ev){var h=fHm(toM(ev.e)-toM(ev.s));wb+='<tr><td>'+ev.dn+'</td><td>'+ev.s+'</td><td>'+ev.e+'</td><td>'+ev.act+'</td><td>'+cLbl(ev.center)+'</td><td class="nt">'+(ev.note||'')+'</td><td>'+h+'</td></tr>';});wb+='</table></div>';});
   // Section: Summary table — hours per monitor per day + total
   var allWAll=[];days.forEach(function(d){d.ev.forEach(function(ev){if(allWAll.indexOf(ev.worker)<0)allWAll.push(ev.worker);});});allWAll.sort();
   var activeDays=days.filter(function(d){return d.ev.length>0;});
@@ -614,16 +618,16 @@ function printWeek(){
     sh+='<tr><td style="font-weight:600">'+w+'</td>';
     var rowTotal=0;
     activeDays.forEach(function(d,di){
-      var h=+(d.ev.filter(function(ev){return ev.worker===w;}).reduce(function(s,ev){return s+(toM(ev.e)-toM(ev.s));},0)/60).toFixed(1);
-      sh+='<td'+(h>0?'':' style="color:#ddd"')+'>'+h+'</td>';
-      rowTotal+=h;totalsRow[di]+=h;
+      var mn=d.ev.filter(function(ev){return ev.worker===w;}).reduce(function(s,ev){return s+(toM(ev.e)-toM(ev.s));},0);
+      sh+='<td'+(mn>0?'':' style="color:#ddd"')+'>'+fHm(mn)+'</td>';
+      rowTotal+=mn;totalsRow[di]+=mn;
     });
     grandTotal+=rowTotal;
-    sh+='<td style="background:#eff6ff;font-weight:700">'+rowTotal.toFixed(1)+'</td></tr>';
+    sh+='<td style="background:#eff6ff;font-weight:700">'+fHm(rowTotal)+'</td></tr>';
   });
   sh+='<tr style="font-weight:800;background:#f0f0f0"><td>TOTAL</td>';
-  totalsRow.forEach(function(t){sh+='<td>'+t.toFixed(1)+'</td>';});
-  sh+='<td style="background:#dbeafe">'+grandTotal.toFixed(1)+'</td></tr></table>';
+  totalsRow.forEach(function(t){sh+='<td>'+fHm(t)+'</td>';});
+  sh+='<td style="background:#dbeafe">'+fHm(grandTotal)+'</td></tr></table>';
   // Build page
   var win=window.open('','_blank','width=900,height=700');
   if(!win){toast('⚠ El navegador bloqueó la ventana. Permite ventanas emergentes para este sitio.');return;}
@@ -689,23 +693,23 @@ function printMes(){
     sh+='<tr><td style="font-weight:600;white-space:nowrap">'+w+'</td>';
     var rowTotal=0;
     wkKeys.forEach(function(wk,wi){
-      var h=+(weeks[wk].filter(function(ev){return ev.worker===w;}).reduce(function(s,ev){return s+(toM(ev.e)-toM(ev.s));},0)/60).toFixed(1);
-      sh+='<td'+(h>0?'':' style="color:#ddd"')+'>'+h+'</td>';
-      rowTotal+=h;colTotals[wi]+=h;
+      var mn=weeks[wk].filter(function(ev){return ev.worker===w;}).reduce(function(s,ev){return s+(toM(ev.e)-toM(ev.s));},0);
+      sh+='<td'+(mn>0?'':' style="color:#ddd"')+'>'+fHm(mn)+'</td>';
+      rowTotal+=mn;colTotals[wi]+=mn;
     });
     grandTotal+=rowTotal;
-    sh+='<td style="background:#eff6ff;font-weight:700">'+rowTotal.toFixed(1)+'</td></tr>';
+    sh+='<td style="background:#eff6ff;font-weight:700">'+fHm(rowTotal)+'</td></tr>';
   });
   sh+='<tr style="font-weight:800;background:#f0f0f0"><td>TOTAL</td>';
-  colTotals.forEach(function(t){sh+='<td>'+t.toFixed(1)+'</td>';});
-  sh+='<td style="background:#dbeafe">'+grandTotal.toFixed(1)+'</td></tr></table>';
+  colTotals.forEach(function(t){sh+='<td>'+fHm(t)+'</td>';});
+  sh+='<td style="background:#dbeafe">'+fHm(grandTotal)+'</td></tr></table>';
   // ---- SECTION 2: Detalle por monitor ----
   var wb='';
   allW.forEach(function(w){
     var wev=mev.filter(function(ev){return ev.worker===w;});
     if(!wev.length)return;
-    var tot=(wev.reduce(function(s,ev){return s+(toM(ev.e)-toM(ev.s));},0)/60).toFixed(1);
-    wb+='<div class="db"><h2>'+w+' <em>'+tot+' h</em></h2><table><tr><th>Fecha</th><th>Dia</th><th>Inicio</th><th>Fin</th><th>Actividad</th><th>Centro</th><th>Nota</th><th>Horas</th></tr>';
+    var tot=wev.reduce(function(s,ev){return s+(toM(ev.e)-toM(ev.s));},0);
+    wb+='<div class="db"><h2>'+w+' <em>'+fHm(tot)+'</em></h2><table><tr><th>Fecha</th><th>Dia</th><th>Inicio</th><th>Fin</th><th>Actividad</th><th>Centro</th><th>Nota</th><th>Horas</th></tr>';
     // Group by week for subtotals
     wkKeys.forEach(function(wk){
       var wkEvs=wev.filter(function(ev){var ewk=ISO(monOf(new Date(ev.date+'T00:00:00')));return ewk===wk;});
@@ -714,15 +718,15 @@ function printMes(){
       wkEvs.forEach(function(ev){
         var dw=new Date(ev.date+'T00:00:00').getDay();
         var dn=DNF7[dw===0?6:dw-1];
-        var h=+((toM(ev.e)-toM(ev.s))/60).toFixed(1);
-        wkTot+=h;
+        var mn=toM(ev.e)-toM(ev.s);
+        wkTot+=mn;
         var dd=ev.date.split('-');
-        wb+='<tr><td>'+dd[2]+'/'+dd[1]+'</td><td>'+dn.slice(0,3)+'</td><td>'+ev.s+'</td><td>'+ev.e+'</td><td>'+ev.act+'</td><td>'+cLbl(ev.center)+'</td><td class="nt">'+(ev.note||'')+'</td><td>'+h.toFixed(1)+'h</td></tr>';
+        wb+='<tr><td>'+dd[2]+'/'+dd[1]+'</td><td>'+dn.slice(0,3)+'</td><td>'+ev.s+'</td><td>'+ev.e+'</td><td>'+ev.act+'</td><td>'+cLbl(ev.center)+'</td><td class="nt">'+(ev.note||'')+'</td><td>'+fHm(mn)+'</td></tr>';
       });
       var m=new Date(wk+'T00:00:00');
-      wb+='<tr style="background:#f0f4ff;font-weight:600"><td colspan="7" style="text-align:right;font-size:9px">Semana '+m.getDate()+'/'+(m.getMonth()+1)+'</td><td>'+wkTot.toFixed(1)+'h</td></tr>';
+      wb+='<tr style="background:#f0f4ff;font-weight:600"><td colspan="7" style="text-align:right;font-size:9px">Semana '+m.getDate()+'/'+(m.getMonth()+1)+'</td><td>'+fHm(wkTot)+'</td></tr>';
     });
-    wb+='<tr style="background:#dbeafe;font-weight:700"><td colspan="7" style="text-align:right">TOTAL '+w+'</td><td>'+tot+'h</td></tr>';
+    wb+='<tr style="background:#dbeafe;font-weight:700"><td colspan="7" style="text-align:right">TOTAL '+w+'</td><td>'+fHm(tot)+'</td></tr>';
     wb+='</table></div>';
   });
   // ---- BUILD PAGE ----
@@ -801,7 +805,7 @@ function _jornadaTable(d){
     var wkEvs=d.weeks[wk];
     var wkTot=(wkEvs.reduce(function(s,ev){return s+(toM(ev.e)-toM(ev.s));},0)/60);
     var m=new Date(wk+'T00:00:00'),mf=addD(m,6);
-    out+='<div class="jt-wk">Semana '+m.getDate()+'/'+(m.getMonth()+1)+' – '+mf.getDate()+'/'+(mf.getMonth()+1)+' · '+wkTot.toFixed(1)+' h</div>';
+    out+='<div class="jt-wk">Semana '+m.getDate()+'/'+(m.getMonth()+1)+' – '+mf.getDate()+'/'+(mf.getMonth()+1)+' · '+fH(wkTot)+'</div>';
     var byDay={},order=[];
     wkEvs.forEach(function(ev){if(!byDay[ev.date]){byDay[ev.date]=[];order.push(ev.date);}byDay[ev.date].push(ev);});
     order.forEach(function(date){
@@ -810,10 +814,10 @@ function _jornadaTable(d){
       var dn=d.DNF7[dw===0?6:dw-1];
       var dd=date.split('-');
       var dayTot=(evs.reduce(function(s,ev){return s+(toM(ev.e)-toM(ev.s));},0)/60);
-      out+='<div class="jt-day"><div class="jt-dayh"><span class="jt-dow">'+dn+'</span><span class="jt-date">'+dd[2]+'/'+dd[1]+'</span><span class="jt-dh">'+dayTot.toFixed(1)+' h</span></div>';
+      out+='<div class="jt-day"><div class="jt-dayh"><span class="jt-dow">'+dn+'</span><span class="jt-date">'+dd[2]+'/'+dd[1]+'</span><span class="jt-dh">'+fH(dayTot)+'</span></div>';
       evs.forEach(function(ev){
-        var h=((toM(ev.e)-toM(ev.s))/60).toFixed(1);
-        out+='<div class="jt-sh" style="border-left-color:'+actColor(ev.act)+'"><span class="jt-time">'+ev.s+'–'+ev.e+'</span><span class="jt-act">'+ev.act+'</span><span class="jt-cen">'+cLbl(ev.center)+'</span>'+(ev.note?'<span class="jt-note">'+ev.note+'</span>':'')+'<span class="jt-hrs">'+h+' h</span></div>';
+        var h=fHm(toM(ev.e)-toM(ev.s));
+        out+='<div class="jt-sh" style="border-left-color:'+actColor(ev.act)+'"><span class="jt-time">'+ev.s+'–'+ev.e+'</span><span class="jt-act">'+ev.act+'</span><span class="jt-cen">'+cLbl(ev.center)+'</span>'+(ev.note?'<span class="jt-note">'+ev.note+'</span>':'')+'<span class="jt-hrs">'+h+'</span></div>';
       });
       out+='</div>';
     });
@@ -831,11 +835,11 @@ function jornadaTrab(){
   if(desde>hasta){res.innerHTML='<p style="color:#dc2626;font-size:13px">La fecha "Desde" debe ser anterior a "Hasta".</p>';return;}
   var d=_jornadaData(worker,desde,hasta);
   if(!d){res.innerHTML='<p style="color:#999;font-size:13px">No hay actividades de '+worker+' en el periodo seleccionado.</p>';return;}
-  var media=d.nDias?(d.totH/d.nDias).toFixed(1):'0';
+  var media=d.nDias?fH(d.totH/d.nDias):'0h';
   var stat=function(v,l){return '<div style="flex:1;min-width:88px;background:#ecfeff;border:1px solid #a5f3fc;border-radius:10px;padding:9px 10px;text-align:center"><div style="font-size:18px;font-weight:800;color:#0891b2;line-height:1">'+v+'</div><div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-top:3px">'+l+'</div></div>';};
   var html='<style>'+_jornadaCss()+'</style>';
   html+='<div style="display:flex;align-items:center;gap:10px;margin:14px 0 10px"><div style="width:32px;height:32px;border-radius:50%;background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">'+worker.charAt(0).toUpperCase()+'</div><div style="font-size:15px;font-weight:700;color:#0f172a">'+worker+'</div></div>';
-  html+='<div style="display:flex;gap:8px;flex-wrap:wrap">'+stat(d.totH.toFixed(1)+'h','Horas')+stat(d.nDias,'Días')+stat(media+'h','Media/día')+stat(d.evs.length,'Activid.')+'</div>';
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap">'+stat(fH(d.totH),'Horas')+stat(d.nDias,'Días')+stat(media,'Media/día')+stat(d.evs.length,'Activid.')+'</div>';
   html+='<div style="text-align:right;margin:12px 0 4px"><button onclick="jornadaPrint()" style="padding:8px 18px;border:none;border-radius:6px;background:#0891b2;color:#fff;cursor:pointer;font-weight:600;font-size:12px">🖶 Imprimir / PDF</button></div>';
   html+=_jornadaTable(d);
   res.innerHTML=html;
@@ -849,7 +853,7 @@ function jornadaPrint(){
   if(!d)return;
   var fd=new Date(desde+'T00:00:00'),fh=new Date(hasta+'T00:00:00');
   var titulo=fd.getDate()+'/'+(fd.getMonth()+1)+'/'+fd.getFullYear()+' - '+fh.getDate()+'/'+(fh.getMonth()+1)+'/'+fh.getFullYear();
-  var media=d.nDias?(d.totH/d.nDias).toFixed(1):'0';
+  var media=d.nDias?fH(d.totH/d.nDias):'0h';
   var css='*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;color:#0f172a;padding:22px}'
     +'.hd{display:flex;align-items:center;gap:12px;margin-bottom:14px}'
     +'.av{width:42px;height:42px;border-radius:50%;background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex-shrink:0}'
@@ -864,7 +868,7 @@ function jornadaPrint(){
   win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Jornada '+d.worker+' '+titulo+'</title><style>'+css+'</style></head><body>');
   win.document.write('<div class="np"><button onclick="window.print()" style="padding:7px 16px;background:#0891b2;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:6px;font-size:12px">Imprimir/PDF</button><button onclick="window.close()" style="padding:7px 16px;background:#fff;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:12px">Cerrar</button></div>');
   win.document.write('<div class="hd"><div class="av">'+d.worker.charAt(0).toUpperCase()+'</div><div><h1>'+d.worker+'</h1><div class="su">SportGest Alzira · Jornada '+titulo+'</div></div></div>');
-  win.document.write('<div class="kpis"><div class="kpi"><b>'+d.totH.toFixed(1)+'h</b><span>Horas totales</span></div><div class="kpi"><b>'+d.nDias+'</b><span>Días trabajados</span></div><div class="kpi"><b>'+media+'h</b><span>Media/día</span></div><div class="kpi"><b>'+d.evs.length+'</b><span>Actividades</span></div></div>');
+  win.document.write('<div class="kpis"><div class="kpi"><b>'+fH(d.totH)+'</b><span>Horas totales</span></div><div class="kpi"><b>'+d.nDias+'</b><span>Días trabajados</span></div><div class="kpi"><b>'+media+'</b><span>Media/día</span></div><div class="kpi"><b>'+d.evs.length+'</b><span>Actividades</span></div></div>');
   win.document.write(_jornadaTable(d));
   win.document.write('</body></html>');
   win.document.close();
@@ -932,7 +936,7 @@ function _nominaCalc(worker,desde,hasta,P){
   return {worker:worker,horas:horas,horasPlan:horasPlan,horasManual:hManual,nDias:d?d.nDias:0,nSem:d?d.wkKeys.length:0,hContrato:hContrato,hExtra:hExtra,pContrato:pContrato,brutoC:brutoC,brutoE:brutoE,brutoSal:brutoSal,plusT:plusT,bruto:bruto,cotEmp:cotEmp,cotTrab:cotTrab,irpf:irpf,costeEmpresa:costeEmpresa,neto:neto};
 }
 function _eurES(n){return n.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';}
-function _hES(n){return n.toFixed(1)+' h';}
+function _hES(n){return fH(n);}
 function calcNomina(){
   var res=document.getElementById('nm-res');
   var worker=document.getElementById('nm-mon').value;
