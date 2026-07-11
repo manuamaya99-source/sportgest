@@ -897,6 +897,7 @@ function openNomina(){
   html+='<div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:14px;flex-wrap:wrap;border-top:1px dashed #e2e8f0;padding-top:12px">';
   html+='<div style="flex:2;min-width:200px">'+fld('Lote — trabajadores <span style="color:#bbb;font-weight:400">(ninguno = todos)</span>','<select id="nm-lote" multiple size="4" style="'+ist+'">'+opts+'</select>')+'</div>';
   html+='<div style="flex:1;min-width:170px"><button onclick="calcNominaLote()" style="width:100%;padding:9px 16px;border:none;border-radius:6px;background:#0e7490;color:#fff;cursor:pointer;font-weight:600;font-size:13px">📋 Todas las nóminas del mes</button></div>';
+  html+='<div style="flex:1;min-width:150px"><button onclick="openPactos()" style="width:100%;padding:9px 16px;border:1px solid #a5f3fc;border-radius:6px;background:#ecfeff;color:#0e7490;cursor:pointer;font-weight:600;font-size:13px">🤝 Pactos salariales</button></div>';
   html+='</div>';
   html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:6px">';
   html+=fld('SMI anual € <span style="color:#bbb;font-weight:400">(2026)</span>','<input type="number" id="nm-smi" value="17094" step="0.01" style="'+ist+'">');
@@ -913,9 +914,52 @@ function openNomina(){
   html+='</div></div>';
   document.body.insertAdjacentHTML('beforeend',html);
 }
+// ============================================================
+// PACTOS SALARIALES (precio/hora pactado por trabajador)
+// ============================================================
+function openPactos(){
+  var ist='width:100%;padding:7px;border:1px solid #ddd;border-radius:6px;font-size:13px';
+  var th='padding:6px 8px;font-size:10px;font-weight:700;text-align:left;border-bottom:2px solid #cbd5e1';
+  var rows=cfg.monitors.map(function(m,i){return _pactoRow(m,i,ist);}).join('');
+  if(!cfg.monitors.length)rows='<tr><td colspan="3" style="padding:14px;text-align:center;color:#999;font-size:12px">No hay monitores. Añádelos en ⚙ Config.</td></tr>';
+  var html='<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10001;display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto" id="pk-overlay" onclick="if(event.target===this)this.remove()">';
+  html+='<div style="background:#fff;border-radius:12px;padding:24px 28px;width:560px;max-width:100%;box-shadow:0 12px 40px rgba(0,0,0,.2)">';
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><h3 style="margin:0;font-size:16px">🤝 Pactos salariales</h3><button onclick="document.getElementById(\'pk-overlay\').remove()" style="padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:12px">Cerrar</button></div>';
+  html+='<p style="font-size:11.5px;color:#64748b;margin:0 0 14px;line-height:1.5">Precio/hora pactado con un trabajador. Al calcular su nómina se usa este precio en lugar de la estimación por SMI. <b>Sin pacto</b> = estimación normal.</p>';
+  html+='<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%"><thead><tr><th style="'+th+'">Trabajador</th><th style="'+th+'">Tipo de pacto</th><th style="'+th+'">€ / hora</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  html+='<div style="text-align:right;margin-top:14px"><span id="pk-saved" style="font-size:11px;color:#16a34a;margin-right:10px"></span><button onclick="document.getElementById(\'pk-overlay\').remove()" style="padding:8px 18px;border:none;border-radius:6px;background:#0e7490;color:#fff;cursor:pointer;font-weight:600;font-size:13px">Hecho</button></div>';
+  html+='</div></div>';
+  document.body.insertAdjacentHTML('beforeend',html);
+}
+function _pactoRow(m,i,ist){
+  var td='padding:6px 8px;border-bottom:1px solid #eef2f7;vertical-align:middle';
+  var p=m.pacto||{},tipo=p.tipo||'',precio=(p.precio!=null?p.precio:'');
+  var opt=function(v,l){return '<option value="'+v+'"'+(tipo===v?' selected':'')+'>'+l+'</option>';};
+  return '<tr><td style="'+td+';font-weight:600;font-size:12px">'+m.name+(m.role?' <span style="font-weight:400;color:#94a3b8;font-size:10px">'+m.role+'</span>':'')+'</td>'
+    +'<td style="'+td+'"><select id="pk-tipo-'+i+'" onchange="savePacto('+i+')" style="'+ist+'">'+opt('','Sin pacto (estimación)')+opt('neto','Precio/hora neto')+opt('bruto','Precio/hora bruto')+'</select></td>'
+    +'<td style="'+td+';width:110px"><input type="number" id="pk-precio-'+i+'" value="'+precio+'" step="0.01" min="0" placeholder="€/h" oninput="savePacto('+i+')" style="'+ist+'"></td></tr>';
+}
+function savePacto(i){
+  var m=cfg.monitors[i]; if(!m)return;
+  var tipo=document.getElementById('pk-tipo-'+i).value;
+  var precio=parseFloat(document.getElementById('pk-precio-'+i).value);
+  if((tipo==='neto'||tipo==='bruto')&&!isNaN(precio)&&precio>0){
+    m.pacto={tipo:tipo,precio:precio};
+  }else{
+    delete m.pacto;
+  }
+  saveCfg();
+  var s=document.getElementById('pk-saved'); if(s){s.textContent='Guardado ✓';setTimeout(function(){if(s)s.textContent='';},1500);}
+}
 function _nominaParams(){
   var num=function(id,def){var v=parseFloat(document.getElementById(id).value);return isNaN(v)?def:v;};
   return {smi:num('nm-smi',17094),hmes:num('nm-hmes',1752),pExtra:num('nm-extra',9),cEmp:num('nm-cemp',33.65),cTrab:num('nm-ctrab',6.50),pTrans:num('nm-trans',3),transOn:document.getElementById('nm-transon').checked,irpfPct:num('nm-irpf',0),irpfOn:document.getElementById('nm-irpfon').checked,semanal:parseFloat(document.getElementById('nm-hcontrato').value)};
+}
+// Pacto salarial del trabajador (precio/hora neto o bruto). null = sin pacto -> estimación SMI.
+function _monPacto(name){
+  var m=cfg.monitors.find(function(x){return x.name===name;});
+  if(m&&m.pacto&&m.pacto.precio>0&&(m.pacto.tipo==='neto'||m.pacto.tipo==='bruto'))return m.pacto;
+  return null;
 }
 function _nominaCalc(worker,desde,hasta,P){
   var d=_jornadaData(worker,desde,hasta);
@@ -923,6 +967,23 @@ function _nominaCalc(worker,desde,hasta,P){
   var horasPlan=d?d.totH:0;
   if(horasPlan<=0&&hManual<=0)return null;
   var horas=horasPlan+hManual;
+  // --- Pacto salarial: precio/hora fijo pactado (sobre horas reales), sin reparto contrato/extra ni SMI ---
+  var pacto=_monPacto(worker);
+  if(pacto){
+    var brutoP;
+    if(pacto.tipo==='bruto'){
+      brutoP=horas*pacto.precio;
+    }else{ // neto pactado -> escalar a bruto (gross-up) revirtiendo cotización trabajador (+ IRPF si aplica)
+      var factor=1-P.cTrab/100-(P.irpfOn?P.irpfPct/100:0);
+      brutoP=factor>0?(horas*pacto.precio)/factor:horas*pacto.precio;
+    }
+    var cotEmpP=brutoP*P.cEmp/100,cotTrabP=brutoP*P.cTrab/100;
+    var irpfP=P.irpfOn?brutoP*P.irpfPct/100:0;
+    return {worker:worker,horas:horas,horasPlan:horasPlan,horasManual:hManual,nDias:d?d.nDias:0,nSem:d?d.wkKeys.length:0,
+      hContrato:horas,hExtra:0,pContrato:horas>0?brutoP/horas:0,brutoC:brutoP,brutoE:0,brutoSal:brutoP,plusT:0,bruto:brutoP,
+      cotEmp:cotEmpP,cotTrab:cotTrabP,irpf:irpfP,costeEmpresa:brutoP+cotEmpP,neto:brutoP-cotTrabP-irpfP,
+      pacto:pacto};
+  }
   var pContrato=P.hmes>0?P.smi/P.hmes:0;
   var semanal=isNaN(P.semanal)?Infinity:P.semanal;
   var hContrato=0,hExtra=0;
@@ -954,13 +1015,23 @@ function calcNomina(){
   var hh=_hES;
   var card=function(v,l,col){return '<div style="flex:1;min-width:120px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;text-align:center"><div style="font-size:19px;font-weight:800;color:'+(col||'#15803d')+';line-height:1">'+v+'</div><div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-top:4px">'+l+'</div></div>';};
   var row=function(l,v,strong){return '<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #f1f5f9'+(strong?';font-weight:700;color:#0f172a':'')+'"><span style="color:#475569">'+l+'</span><span style="white-space:nowrap">'+v+'</span></div>';};
-  var html='<div style="display:flex;align-items:center;gap:10px;margin:14px 0 10px"><div style="width:32px;height:32px;border-radius:50%;background:#15803d;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">'+worker.charAt(0).toUpperCase()+'</div><div style="font-size:15px;font-weight:700;color:#0f172a">'+worker+'</div></div>';
+  var pactoBadge=r.pacto?'<span style="font-size:10px;font-weight:700;color:#0e7490;background:#ecfeff;border:1px solid #a5f3fc;border-radius:20px;padding:2px 9px">🤝 Pacto: '+eur(r.pacto.precio)+'/h '+r.pacto.tipo+'</span>':'';
+  var html='<div style="display:flex;align-items:center;gap:10px;margin:14px 0 10px"><div style="width:32px;height:32px;border-radius:50%;background:#15803d;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">'+worker.charAt(0).toUpperCase()+'</div><div style="font-size:15px;font-weight:700;color:#0f172a">'+worker+'</div>'+pactoBadge+'</div>';
   html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+card(eur(bruto),'Bruto total')+card(eur(costeEmpresa),'Coste empresa','#b45309')+card(eur(neto),'Neto estimado','#0891b2')+'</div>';
   html+='<div style="background:#fafafa;border:1px solid #eee;border-radius:10px;padding:10px 14px;font-size:12px">';
   html+=row('Horas reales del periodo',hh(horas)+' · '+r.nDias+' días · '+r.nSem+' sem.'+(r.horasManual>0?' · incl. '+hh(r.horasManual)+' manuales':''));
-  html+=row('Salario base ('+hh(hContrato)+' contrato × '+eur(pContrato)+'/h)',eur(brutoC));
-  html+=row('Horas extra × '+eur(pExtra)+'/h',hh(hExtra)+' → '+eur(brutoE));
-  if(transOn)html+=row('Plus transporte ('+hh(horas)+' ÷ 8 × '+eur(pTrans)+')',eur(plusT));
+  if(r.pacto){
+    if(r.pacto.tipo==='bruto'){
+      html+=row('Precio pactado: '+hh(horas)+' × '+eur(r.pacto.precio)+'/h bruto',eur(bruto));
+    }else{
+      html+=row('Neto pactado: '+hh(horas)+' × '+eur(r.pacto.precio)+'/h',eur(horas*r.pacto.precio));
+      html+=row('Bruto equivalente (revirtiendo cotización'+(irpfOn?' + IRPF':'')+')',eur(bruto));
+    }
+  }else{
+    html+=row('Salario base ('+hh(hContrato)+' contrato × '+eur(pContrato)+'/h)',eur(brutoC));
+    html+=row('Horas extra × '+eur(pExtra)+'/h',hh(hExtra)+' → '+eur(brutoE));
+    if(transOn)html+=row('Plus transporte ('+hh(horas)+' ÷ 8 × '+eur(pTrans)+')',eur(plusT));
+  }
   html+=row('BRUTO TOTAL',eur(bruto),true);
   html+=row('Cotización empresa ('+cEmp+'%)','+ '+eur(cotEmp));
   html+=row('COSTE EMPRESA TOTAL',eur(costeEmpresa),true);
@@ -970,7 +1041,11 @@ function calcNomina(){
   html+=row('Precio/hora bruto',eur(bruto/horas)+'/h');
   html+=row('Precio/hora neto',eur(neto/horas)+'/h');
   html+='</div>';
-  html+='<p style="font-size:10.5px;color:#94a3b8;margin-top:10px;line-height:1.5">Estimación orientativa. Reparto por semana ('+(isFinite(semanal)?semanal+' h/sem a contrato, exceso → extra':'todas a contrato')+'). Precio/hora contrato = SMI 17.094 €/año ÷ '+hmes+' h = '+eur(pContrato)+'/h. Cotización empresa 33,65% (CC 23,60 + MEI 0,75 + AT/EP 3,00 + desempleo 5,50 + FP 0,60 + FOGASA 0,20); trabajador 6,50% (CC 4,70 + MEI 0,15 + FP 0,10 + desempleo 1,55), según nómina de la gestoría — AT/EP y desempleo varían por actividad/contrato. El IRPF se aplica solo si marcas la casilla. No incluye prorrata de pagas extra.</p>';
+  if(r.pacto){
+    html+='<p style="font-size:10.5px;color:#94a3b8;margin-top:10px;line-height:1.5">Estimación con <b>pacto salarial</b>: '+eur(r.pacto.precio)+'/h '+r.pacto.tipo+' × horas reales (sin reparto contrato/extra ni plus transporte). '+(r.pacto.tipo==='neto'?'El neto pactado se escala a bruto revirtiendo la cotización del trabajador ('+cTrab+'%)'+(irpfOn?' y el IRPF ('+irpfPct+'%)':'')+'. ':'')+'Cotización empresa '+cEmp+'%, trabajador '+cTrab+'%. '+(irpfOn?'IRPF '+irpfPct+'%.':'Sin IRPF.')+' No incluye prorrata de pagas extra.</p>';
+  }else{
+    html+='<p style="font-size:10.5px;color:#94a3b8;margin-top:10px;line-height:1.5">Estimación orientativa. Reparto por semana ('+(isFinite(semanal)?semanal+' h/sem a contrato, exceso → extra':'todas a contrato')+'). Precio/hora contrato = SMI 17.094 €/año ÷ '+hmes+' h = '+eur(pContrato)+'/h. Cotización empresa 33,65% (CC 23,60 + MEI 0,75 + AT/EP 3,00 + desempleo 5,50 + FP 0,60 + FOGASA 0,20); trabajador 6,50% (CC 4,70 + MEI 0,15 + FP 0,10 + desempleo 1,55), según nómina de la gestoría — AT/EP y desempleo varían por actividad/contrato. El IRPF se aplica solo si marcas la casilla. No incluye prorrata de pagas extra.</p>';
+  }
   res.innerHTML=html;
 }
 
@@ -1008,7 +1083,9 @@ function _loteTablaHTML(rows,tot,P){
   h+='<th style="'+thL+'">Trabajador</th><th style="'+th+'">Horas</th><th style="'+th+'">H.Contr.</th><th style="'+th+'">H.Extra</th><th style="'+th+'">Salario base</th><th style="'+th+'">Extra €</th><th style="'+th+'">Transporte</th><th style="'+th+';color:#15803d">BRUTO</th><th style="'+th+';color:#b45309">Coste empresa</th><th style="'+th+'">Cotiz. trab.</th><th style="'+th+'">IRPF</th><th style="'+th+';color:#0891b2">NETO</th>';
   h+='</tr></thead><tbody>';
   rows.forEach(function(r){
-    h+='<tr><td style="'+tdL+'">'+r.worker+(r.horasManual>0?' <span style="font-weight:600;color:#d97706;font-size:9px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:1px 4px;white-space:nowrap">+'+_hES(r.horasManual)+' man.</span>':'')+'</td><td style="'+td+'">'+hh(r.horas)+'</td><td style="'+td+'">'+hh(r.hContrato)+'</td><td style="'+td+'">'+hh(r.hExtra)+'</td><td style="'+td+'">'+eur(r.brutoC)+'</td><td style="'+td+'">'+eur(r.brutoE)+'</td><td style="'+td+'">'+eur(r.plusT)+'</td><td style="'+td+';font-weight:700;color:#15803d">'+eur(r.bruto)+'</td><td style="'+td+';color:#b45309">'+eur(r.costeEmpresa)+'</td><td style="'+td+'">'+eur(r.cotTrab)+'</td><td style="'+td+'">'+eur(r.irpf)+'</td><td style="'+td+';font-weight:700;color:#0891b2">'+eur(r.neto)+'</td></tr>';
+    var pk=r.pacto?' <span style="font-size:9px;font-weight:700;color:#0e7490;background:#ecfeff;border:1px solid #a5f3fc;border-radius:10px;padding:1px 5px;white-space:nowrap">🤝 '+eur(r.pacto.precio)+'/h '+r.pacto.tipo+'</span>':'';
+    var man=(r.horasManual>0)?' <span style="font-weight:600;color:#d97706;font-size:9px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:1px 4px;white-space:nowrap">+'+_hES(r.horasManual)+' man.</span>':'';
+    h+='<tr><td style="'+tdL+'">'+r.worker+pk+man+'</td><td style="'+td+'">'+hh(r.horas)+'</td><td style="'+td+'">'+hh(r.hContrato)+'</td><td style="'+td+'">'+hh(r.hExtra)+'</td><td style="'+td+'">'+eur(r.brutoC)+'</td><td style="'+td+'">'+eur(r.brutoE)+'</td><td style="'+td+'">'+eur(r.plusT)+'</td><td style="'+td+';font-weight:700;color:#15803d">'+eur(r.bruto)+'</td><td style="'+td+';color:#b45309">'+eur(r.costeEmpresa)+'</td><td style="'+td+'">'+eur(r.cotTrab)+'</td><td style="'+td+'">'+eur(r.irpf)+'</td><td style="'+td+';font-weight:700;color:#0891b2">'+eur(r.neto)+'</td></tr>';
   });
   h+='<tr style="background:#f8fafc"><td style="'+tdt+';text-align:left">TOTAL ('+rows.length+')</td><td style="'+tdt+'">'+hh(tot.horas)+'</td><td style="'+tdt+'">'+hh(tot.hContrato)+'</td><td style="'+tdt+'">'+hh(tot.hExtra)+'</td><td style="'+tdt+'">'+eur(tot.brutoC)+'</td><td style="'+tdt+'">'+eur(tot.brutoE)+'</td><td style="'+tdt+'">'+eur(tot.plusT)+'</td><td style="'+tdt+';color:#15803d">'+eur(tot.bruto)+'</td><td style="'+tdt+';color:#b45309">'+eur(tot.costeEmpresa)+'</td><td style="'+tdt+'">'+eur(tot.cotTrab)+'</td><td style="'+tdt+'">'+eur(tot.irpf)+'</td><td style="'+tdt+';color:#0891b2">'+eur(tot.neto)+'</td></tr>';
   h+='</tbody></table></div>';
