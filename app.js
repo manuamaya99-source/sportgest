@@ -765,9 +765,36 @@ function openJornada(){
   html+='<div style="flex:1"><label style="'+lst+'">Hasta</label><input type="date" id="jt-hasta" value="'+d2+'" style="'+ist+'"></div>';
   html+='<button onclick="jornadaTrab()" style="padding:9px 18px;border:none;border-radius:6px;background:#0891b2;color:#fff;cursor:pointer;font-weight:600;font-size:13px;white-space:nowrap">Ver jornada</button>';
   html+='</div>';
+  // --- Planificacion semanal: rejilla de toda la plantilla (dias x actividades) ---
+  html+='<div style="border-top:1px solid #e2e8f0;margin-top:16px;padding-top:14px">';
+  html+='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Planificacion semanal · todas las actividades y trabajadores</div>';
+  html+='<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">';
+  html+='<div style="flex:1;min-width:150px"><label style="'+lst+'">Semana del</label><input type="date" id="jt-semana" value="'+ISO(lunes)+'" onchange="_jtSemLbl()" style="'+ist+'"></div>';
+  html+='<div style="display:flex;align-items:center;gap:6px;padding-bottom:1px">';
+  html+='<button onclick="jtSemShift(-1)" title="Semana anterior" style="width:30px;height:34px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:14px">&lsaquo;</button>';
+  html+='<span id="jt-semlbl" style="font-size:12px;font-weight:600;color:#0f172a;min-width:118px;text-align:center"></span>';
+  html+='<button onclick="jtSemShift(1)" title="Semana siguiente" style="width:30px;height:34px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:14px">&rsaquo;</button>';
+  html+='</div>';
+  html+='<button onclick="planSemana()" style="padding:9px 18px;border:none;border-radius:6px;background:#7c3aed;color:#fff;cursor:pointer;font-weight:600;font-size:13px;white-space:nowrap">&#128197; Planificacion semanal</button>';
+  html+='</div></div>';
   html+='<div id="jt-res"></div>';
   html+='</div></div>';
   document.body.insertAdjacentHTML('beforeend',html);
+  _jtSemLbl();
+}
+// Etiqueta "Lun/M – Dom/M AAAA" de la semana elegida en el selector de planificacion.
+function _jtSemLbl(){
+  var el=document.getElementById('jt-semana'),lb=document.getElementById('jt-semlbl');
+  if(!el||!lb)return;
+  if(!el.value){lb.textContent='—';return;}
+  var m=monOf(new Date(el.value+'T00:00:00')),f=addD(m,6);
+  lb.textContent=m.getDate()+'/'+(m.getMonth()+1)+' – '+f.getDate()+'/'+(f.getMonth()+1)+' '+m.getFullYear();
+}
+function jtSemShift(n){
+  var el=document.getElementById('jt-semana');
+  if(!el||!el.value)return;
+  el.value=ISO(addD(monOf(new Date(el.value+'T00:00:00')),n*7));
+  _jtSemLbl();
 }
 // Construye los datos de la jornada de un trabajador en un rango. Devuelve null si no hay nada.
 function _jornadaData(worker,desde,hasta){
@@ -870,6 +897,134 @@ function jornadaPrint(){
   win.document.write('<div class="hd"><div class="av">'+d.worker.charAt(0).toUpperCase()+'</div><div><h1>'+d.worker+'</h1><div class="su">SportGest Alzira · Jornada '+titulo+'</div></div></div>');
   win.document.write('<div class="kpis"><div class="kpi"><b>'+fH(d.totH)+'</b><span>Horas totales</span></div><div class="kpi"><b>'+d.nDias+'</b><span>Días trabajados</span></div><div class="kpi"><b>'+media+'</b><span>Media/día</span></div><div class="kpi"><b>'+d.evs.length+'</b><span>Actividades</span></div></div>');
   win.document.write(_jornadaTable(d));
+  win.document.write('</body></html>');
+  win.document.close();
+}
+
+// ============================================================
+// PLANIFICACION SEMANAL (rejilla: columnas = dias, filas = actividades)
+// ============================================================
+// Datos de la semana que contiene `fecha` (ISO). Sin filtros: toda la plantilla.
+function _planSemanaData(fecha){
+  var mon=monOf(new Date(fecha+'T00:00:00'));
+  var days=[];
+  for(var i=0;i<7;i++){
+    var dd=addD(mon,i);
+    days.push({iso:ISO(dd),n:DIAS[i],lbl:dd.getDate()+'/'+(dd.getMonth()+1),hoy:ISO(dd)===ISO(new Date())});
+  }
+  var wev=events.filter(function(e){return e.date>=days[0].iso&&e.date<=days[6].iso;});
+  if(!wev.length)return null;
+  // Filas ordenadas como en Config; las actividades sueltas (ya borradas de cfg) van al final.
+  var order=cfg.activities.map(function(a){return a.id;});
+  var acts=[];
+  wev.forEach(function(e){if(acts.indexOf(e.act)<0)acts.push(e.act);});
+  acts.sort(function(a,b){
+    var ia=order.indexOf(a),ib=order.indexOf(b);
+    if(ia<0)ia=9999;if(ib<0)ib=9999;
+    return ia-ib||a.localeCompare(b);
+  });
+  var grid={};
+  acts.forEach(function(a){grid[a]=[[],[],[],[],[],[],[]];});
+  wev.forEach(function(e){
+    for(var di=0;di<7;di++){if(days[di].iso===e.date){grid[e.act][di].push(e);break;}}
+  });
+  acts.forEach(function(a){grid[a].forEach(function(c){c.sort(function(x,y){return toM(x.s)-toM(y.s);});});});
+  var dayMin=days.map(function(d,i){
+    return acts.reduce(function(s,a){
+      return s+grid[a][i].reduce(function(t,e){return t+(toM(e.e)-toM(e.s));},0);
+    },0);
+  });
+  var wk=[],cub=0;
+  wev.forEach(function(e){
+    if(wk.indexOf(e.worker)<0)wk.push(e.worker);
+    if(e.worker.toUpperCase().indexOf('CUBRIR')>=0)cub++;
+  });
+  return {mon:mon,days:days,acts:acts,grid:grid,dayMin:dayMin,n:wev.length,nWork:wk.length,nCub:cub,
+          totMin:dayMin.reduce(function(s,m){return s+m;},0)};
+}
+function _planSemanaCss(){
+  return 'table.ps{width:100%;border-collapse:collapse;table-layout:fixed}'
+    +'.ps th,.ps td{border:1px solid #dbe2ea;vertical-align:top;padding:4px}'
+    +'.ps thead th{background:#f1f5f9;text-align:center;font-size:11px;font-weight:700;color:#0f172a;padding:6px 4px}'
+    +'.ps thead th span{display:block;font-weight:400;font-size:9px;color:#64748b;margin-top:1px}'
+    +'.ps th.ps-rh{width:104px;background:#f8fafc;text-align:left;font-size:11px;font-weight:700;color:#0f172a;vertical-align:middle}'
+    +'.ps thead th.ps-hoy,.ps td.ps-hoy{background:#fffbeb}'
+    +'.ps td.ps-vac{background:#fcfcfd}'
+    +'.ps-ev{border-left:3px solid #94a3b8;border-radius:5px;padding:3px 5px;margin-bottom:3px;font-size:9.5px;line-height:1.28;break-inside:avoid}'
+    +'.ps-ev:last-child{margin-bottom:0}'
+    +'.ps-t{font-weight:700;font-variant-numeric:tabular-nums}'
+    +'.ps-w{font-weight:600}'
+    +'.ps-c{font-size:9px;opacity:.72}'
+    +'.ps-n{font-size:9px;font-style:italic;opacity:.6}'
+    +'.ps-ev.cub{box-shadow:inset 0 0 0 2px #f59e0b}'
+    +'.ps tfoot th,.ps tfoot td{background:#f1f5f9;font-size:10px;font-weight:700;text-align:center;color:#0f172a;vertical-align:middle}';
+}
+// Rejilla HTML: una fila por actividad, una columna por dia, sesiones apiladas en la celda.
+function _planSemanaHtml(d){
+  var info=function(id){
+    return cfg.activities.find(function(x){return x.id===id;})||{label:id,color:'#f3f4f6',border:'#9ca3af',text:'#374151'};
+  };
+  var h='<table class="ps"><thead><tr><th class="ps-rh">Actividad</th>';
+  d.days.forEach(function(day){h+='<th'+(day.hoy?' class="ps-hoy"':'')+'>'+day.n.slice(0,3)+'<span>'+day.lbl+'</span></th>';});
+  h+='</tr></thead><tbody>';
+  d.acts.forEach(function(act){
+    var a=info(act);
+    h+='<tr><th class="ps-rh" style="border-left:5px solid '+a.border+'">'+a.label+'</th>';
+    for(var i=0;i<7;i++){
+      var evs=d.grid[act][i];
+      h+='<td class="'+(d.days[i].hoy?'ps-hoy':(evs.length?'':'ps-vac'))+'">';
+      evs.forEach(function(ev){
+        var cub=ev.worker.toUpperCase().indexOf('CUBRIR')>=0;
+        h+='<div class="ps-ev'+(cub?' cub':'')+'" style="background:'+a.color+';border-left-color:'+a.border+';color:'+(a.text||'#1a1a1a')+'">'
+          +'<div class="ps-t">'+ev.s+'–'+ev.e+'</div>'
+          +'<div class="ps-w">'+ev.worker+'</div>'
+          +'<div class="ps-c">'+cLbl(ev.center)+'</div>'
+          +(ev.note?'<div class="ps-n">'+ev.note+'</div>':'')
+          +'</div>';
+      });
+      h+='</td>';
+    }
+    h+='</tr>';
+  });
+  h+='</tbody><tfoot><tr><th class="ps-rh">TOTAL</th>';
+  d.dayMin.forEach(function(m){h+='<td>'+(m?fHm(m):'—')+'</td>';});
+  h+='</tr></tfoot></table>';
+  return h;
+}
+// Abre la planificacion de la semana elegida en el panel de Jornada.
+function planSemana(){
+  var el=document.getElementById('jt-semana');
+  var fecha=el?el.value:ISO(lunes);
+  if(!fecha){alert('Selecciona la semana.');return;}
+  var d=_planSemanaData(fecha);
+  var m=monOf(new Date(fecha+'T00:00:00')),f=addD(m,6);
+  var titulo=m.getDate()+'/'+(m.getMonth()+1)+' - '+f.getDate()+'/'+(f.getMonth()+1)+'/'+m.getFullYear();
+  if(!d){alert('No hay actividades en la semana '+titulo+'.');return;}
+  var css='*{box-sizing:border-box;margin:0;padding:0}'
+    +'body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;color:#0f172a;padding:18px}'
+    +'h1{font-size:18px;font-weight:800}.su{font-size:11px;color:#888;margin:2px 0 14px}'
+    +'.kpis{display:flex;gap:10px;margin-bottom:14px}'
+    +'.kpi{flex:1;border:1px solid #ddd6fe;background:#f5f3ff;border-radius:10px;padding:9px;text-align:center}'
+    +'.kpi b{display:block;font-size:17px;color:#7c3aed}'
+    +'.kpi span{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.04em}'
+    +_planSemanaCss()
+    +'.lg{margin-top:10px;font-size:9px;color:#94a3b8}'
+    +'.np{margin-bottom:14px}'
+    +'@page{size:A4 landscape;margin:8mm}'
+    +'@media print{.np{display:none}body{padding:0}.ps-ev{font-size:8.5px}}';
+  var win=window.open('','_blank','width=1200,height=800');
+  if(!win){toast('⚠ El navegador bloqueó la ventana. Permite ventanas emergentes para este sitio.');return;}
+  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Planificacion '+titulo+'</title><style>'+css+'</style></head><body>');
+  win.document.write('<div class="np"><button onclick="window.print()" style="padding:7px 16px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:6px;font-size:12px">Imprimir/PDF</button><button onclick="window.close()" style="padding:7px 16px;background:#fff;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:12px">Cerrar</button></div>');
+  win.document.write('<h1>Planificacion semanal</h1>');
+  win.document.write('<p class="su">SportGest Alzira · Semana '+titulo+'</p>');
+  win.document.write('<div class="kpis"><div class="kpi"><b>'+d.n+'</b><span>Actividades</span></div>'
+    +'<div class="kpi"><b>'+d.acts.length+'</b><span>Tipos de actividad</span></div>'
+    +'<div class="kpi"><b>'+d.nWork+'</b><span>Trabajadores</span></div>'
+    +'<div class="kpi"><b>'+fHm(d.totMin)+'</b><span>Horas totales</span></div>'
+    +'<div class="kpi"><b'+(d.nCub?' style="color:#d97706"':'')+'>'+d.nCub+'</b><span>A cubrir</span></div></div>');
+  win.document.write(_planSemanaHtml(d));
+  win.document.write('<p class="lg">Cada celda: horario · trabajador · centro'+(d.nCub?' — el borde naranja marca las sesiones sin cubrir.':'.')+'</p>');
   win.document.write('</body></html>');
   win.document.close();
 }

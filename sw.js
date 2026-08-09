@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sportgest-v4';
+const CACHE_NAME = 'sportgest-v5';
 const ASSETS = [
   './',
   './index.html',
