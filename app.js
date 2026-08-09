@@ -976,9 +976,35 @@ function _planSemanaCss(){
     +'.ps-c{font-size:9px;opacity:.72}'
     +'.ps-n{font-size:9px;font-style:italic;opacity:.6}'
     +'.ps-ev.cub{box-shadow:inset 0 0 0 2px #f59e0b}'
-    +'.ps tfoot th,.ps tfoot td{background:#f1f5f9;font-size:10px;font-weight:700;text-align:center;color:#0f172a;vertical-align:middle}';
+    +'.ps tfoot th,.ps tfoot td{background:#f1f5f9;font-size:10px;font-weight:700;text-align:center;color:#0f172a;vertical-align:middle}'
+    +'.ps-ley{display:flex;flex-wrap:wrap;gap:5px 12px;margin-top:12px;break-inside:avoid}'
+    +'.ps-ley i{display:flex;align-items:center;gap:5px;font-size:9.5px;font-style:normal;color:#334155}'
+    +'.ps-ley b{width:13px;height:13px;border-radius:4px;border:1px solid rgba(0,0,0,.12);flex-shrink:0}';
+}
+// Leyenda de colores por trabajador (los que aparecen en la semana mostrada).
+function _planLeyendaHtml(d){
+  var ws=[];
+  d.acts.forEach(function(a){
+    d.grid[a].forEach(function(c){c.forEach(function(ev){if(ws.indexOf(ev.worker)<0)ws.push(ev.worker);});});
+  });
+  if(!ws.length)return '';
+  ws.sort();
+  return '<div class="ps-ley">'+ws.map(function(w){
+    var cub=w.toUpperCase().indexOf('CUBRIR')>=0;
+    var c=_monColor(w)||(cub?'#fff7ed':'#f1f5f9');
+    return '<i><b style="background:'+c+(cub?';box-shadow:inset 0 0 0 2px #f59e0b':'')+'"></b>'+w+'</i>';
+  }).join('')+'</div>';
+}
+// Color asignado al trabajador en Config. null si no esta dado de alta
+// (grupos, "A CUBRIR"...) o si no tiene color.
+function _monColor(name){
+  if(!name)return null;
+  var m=cfg.monitors.find(function(x){return x.name===name;})
+      ||cfg.monitors.find(function(x){return x.name.toUpperCase()===name.toUpperCase();});
+  return m&&m.color?m.color:null;
 }
 // Rejilla HTML: una fila por actividad, una columna por dia, sesiones apiladas en la celda.
+// Fondo de casilla = color del trabajador; borde izquierdo = color de la actividad.
 function _planSemanaHtml(d){
   var info=function(id){
     return cfg.activities.find(function(x){return x.id===id;})||{label:id,color:'#f3f4f6',border:'#9ca3af',text:'#374151'};
@@ -994,7 +1020,8 @@ function _planSemanaHtml(d){
       h+='<td class="'+(d.days[i].hoy?'ps-hoy':(evs.length?'':'ps-vac'))+'">';
       evs.forEach(function(ev){
         var cub=ev.worker.toUpperCase().indexOf('CUBRIR')>=0;
-        h+='<div class="ps-ev'+(cub?' cub':'')+'" style="background:'+a.color+';border-left-color:'+a.border+';color:'+(a.text||'#1a1a1a')+'">'
+        var bg=_monColor(ev.worker)||(cub?'#fff7ed':'#f1f5f9');
+        h+='<div class="ps-ev'+(cub?' cub':'')+'" style="background:'+bg+';border-left-color:'+a.border+';color:#1a1a1a">'
           +'<div class="ps-t">'+ev.s+'–'+ev.e+'</div>'
           // Con un solo trabajador seleccionado, repetir su nombre en cada celda sobra.
           +(d.worker?'':'<div class="ps-w">'+ev.worker+'</div>')
@@ -1056,8 +1083,10 @@ function planSemana(){
   if(!worker)kpis+='<div class="kpi"><b'+(d.nCub?' style="color:#d97706"':'')+'>'+d.nCub+'</b><span>A cubrir</span></div>';
   win.document.write(kpis+'</div>');
   win.document.write(_planSemanaHtml(d));
-  win.document.write('<p class="lg">Cada celda: horario · '+(worker?'':'trabajador · ')+'centro'
-    +(d.nCub&&!worker?' — el borde naranja marca las sesiones sin cubrir.':'.')+'</p>');
+  if(!worker)win.document.write(_planLeyendaHtml(d));
+  win.document.write('<p class="lg">Cada celda: horario · '+(worker?'':'trabajador · ')+'centro. '
+    +'El fondo es el color del trabajador (Config) y el borde izquierdo el de la actividad'
+    +(d.nCub&&!worker?'; el recuadro naranja marca las sesiones sin cubrir.':'.')+'</p>');
   win.document.write('</body></html>');
   win.document.close();
 }
