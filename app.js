@@ -931,11 +931,20 @@ function _planSemanaData(fecha,worker){
     return worker?e.worker===worker:true;
   });
   if(!wev.length)return null;
-  // Filas ordenadas como en Config; las actividades sueltas (ya borradas de cfg) van al final.
+  // Filas en orden cronologico: primero la actividad que empieza mas pronto en la
+  // semana, para que la jornada se lea de arriba abajo. Empates -> la que acaba
+  // antes, y despues el orden de Config.
   var order=cfg.activities.map(function(a){return a.id;});
-  var acts=[];
-  wev.forEach(function(e){if(acts.indexOf(e.act)<0)acts.push(e.act);});
+  var acts=[],ini={},fin={};
+  wev.forEach(function(e){
+    if(acts.indexOf(e.act)<0)acts.push(e.act);
+    var s=toM(e.s),f=toM(e.e);
+    if(ini[e.act]==null||s<ini[e.act])ini[e.act]=s;
+    if(fin[e.act]==null||f<fin[e.act])fin[e.act]=f;
+  });
   acts.sort(function(a,b){
+    if(ini[a]!==ini[b])return ini[a]-ini[b];
+    if(fin[a]!==fin[b])return fin[a]-fin[b];
     var ia=order.indexOf(a),ib=order.indexOf(b);
     if(ia<0)ia=9999;if(ib<0)ib=9999;
     return ia-ib||a.localeCompare(b);
@@ -967,6 +976,7 @@ function _planSemanaCss(){
     +'.ps thead th{background:#f1f5f9;text-align:center;font-size:11px;font-weight:700;color:#0f172a;padding:6px 4px}'
     +'.ps thead th span{display:block;font-weight:400;font-size:9px;color:#64748b;margin-top:1px}'
     +'.ps th.ps-rh{width:104px;background:#f8fafc;text-align:left;font-size:11px;font-weight:700;color:#0f172a;vertical-align:middle}'
+    +'.ps-rht{display:block;font-weight:600;font-size:9.5px;color:#64748b;font-variant-numeric:tabular-nums;margin-top:1px}'
     +'.ps thead th.ps-hoy,.ps td.ps-hoy{background:#fffbeb}'
     +'.ps td.ps-vac{background:#fcfcfd}'
     +'.ps-ev{border-left:3px solid #94a3b8;border-radius:5px;padding:3px 5px;margin-bottom:3px;font-size:9.5px;line-height:1.28;break-inside:avoid}'
@@ -1014,7 +1024,14 @@ function _planSemanaHtml(d){
   h+='</tr></thead><tbody>';
   d.acts.forEach(function(act){
     var a=info(act);
-    h+='<tr><th class="ps-rh" style="border-left:5px solid '+a.border+'">'+a.label+'</th>';
+    // Si todas las sesiones de la fila empiezan a la misma hora, se muestra bajo el
+    // nombre; si varian, la hora ya va en cada casilla.
+    var hh=null,mixed=false;
+    d.grid[act].forEach(function(c){c.forEach(function(ev){
+      if(hh===null)hh=ev.s;else if(hh!==ev.s)mixed=true;
+    });});
+    h+='<tr><th class="ps-rh" style="border-left:5px solid '+a.border+'">'+a.label
+      +(hh&&!mixed?'<span class="ps-rht">'+hh+'</span>':'')+'</th>';
     for(var i=0;i<7;i++){
       var evs=d.grid[act][i];
       h+='<td class="'+(d.days[i].hoy?'ps-hoy':(evs.length?'':'ps-vac'))+'">';
@@ -1084,7 +1101,8 @@ function planSemana(){
   win.document.write(kpis+'</div>');
   win.document.write(_planSemanaHtml(d));
   if(!worker)win.document.write(_planLeyendaHtml(d));
-  win.document.write('<p class="lg">Cada celda: horario · '+(worker?'':'trabajador · ')+'centro. '
+  win.document.write('<p class="lg">Actividades ordenadas por hora de inicio, de la mas temprana a la mas tardia. '
+    +'Cada celda: horario · '+(worker?'':'trabajador · ')+'centro. '
     +'El fondo es el color del trabajador (Config) y el borde izquierdo el de la actividad'
     +(d.nCub&&!worker?'; el recuadro naranja marca las sesiones sin cubrir.':'.')+'</p>');
   win.document.write('</body></html>');
