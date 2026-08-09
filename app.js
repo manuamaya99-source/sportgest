@@ -931,33 +931,32 @@ function _planSemanaData(fecha,worker){
     return worker?e.worker===worker:true;
   });
   if(!wev.length)return null;
-  // Filas en orden cronologico: primero la actividad que empieza mas pronto en la
-  // semana, para que la jornada se lea de arriba abajo. Empates -> la que acaba
-  // antes, y despues el orden de Config.
+  // Una fila por FRANJA HORARIA (hora de inicio + actividad), no por actividad.
+  // Asi la jornada se lee de arriba abajo en orden cronologico real: si entre dos
+  // sesiones de Gym hay un SOS, las de Gym salen en filas separadas.
   var order=cfg.activities.map(function(a){return a.id;});
-  var acts=[],ini={},fin={};
+  var rows=[],byKey={},acts=[];
   wev.forEach(function(e){
     if(acts.indexOf(e.act)<0)acts.push(e.act);
-    var s=toM(e.s),f=toM(e.e);
-    if(ini[e.act]==null||s<ini[e.act])ini[e.act]=s;
-    if(fin[e.act]==null||f<fin[e.act])fin[e.act]=f;
+    var key=e.s+'|'+e.act;
+    if(!byKey[key]){
+      byKey[key]={key:key,act:e.act,s:e.s,e:e.e,mixEnd:false,ini:toM(e.s),cells:[[],[],[],[],[],[],[]]};
+      rows.push(byKey[key]);
+    }else if(byKey[key].e!==e.e){byKey[key].mixEnd=true;}
+    for(var di=0;di<7;di++){if(days[di].iso===e.date){byKey[key].cells[di].push(e);break;}}
   });
-  acts.sort(function(a,b){
-    if(ini[a]!==ini[b])return ini[a]-ini[b];
-    if(fin[a]!==fin[b])return fin[a]-fin[b];
-    var ia=order.indexOf(a),ib=order.indexOf(b);
+  rows.sort(function(a,b){
+    if(a.ini!==b.ini)return a.ini-b.ini;
+    var fa=toM(a.e),fb=toM(b.e);
+    if(fa!==fb)return fa-fb;
+    var ia=order.indexOf(a.act),ib=order.indexOf(b.act);
     if(ia<0)ia=9999;if(ib<0)ib=9999;
-    return ia-ib||a.localeCompare(b);
+    return ia-ib||a.act.localeCompare(b.act);
   });
-  var grid={};
-  acts.forEach(function(a){grid[a]=[[],[],[],[],[],[],[]];});
-  wev.forEach(function(e){
-    for(var di=0;di<7;di++){if(days[di].iso===e.date){grid[e.act][di].push(e);break;}}
-  });
-  acts.forEach(function(a){grid[a].forEach(function(c){c.sort(function(x,y){return toM(x.s)-toM(y.s);});});});
+  rows.forEach(function(r){r.cells.forEach(function(c){c.sort(function(x,y){return toM(x.e)-toM(y.e);});});});
   var dayMin=days.map(function(d,i){
-    return acts.reduce(function(s,a){
-      return s+grid[a][i].reduce(function(t,e){return t+(toM(e.e)-toM(e.s));},0);
+    return rows.reduce(function(s,r){
+      return s+r.cells[i].reduce(function(t,e){return t+(toM(e.e)-toM(e.s));},0);
     },0);
   });
   var wk=[],cub=0,dias={};
@@ -966,7 +965,7 @@ function _planSemanaData(fecha,worker){
     if(e.worker.toUpperCase().indexOf('CUBRIR')>=0)cub++;
     dias[e.date]=1;
   });
-  return {mon:mon,days:days,acts:acts,grid:grid,dayMin:dayMin,n:wev.length,nWork:wk.length,nCub:cub,
+  return {mon:mon,days:days,rows:rows,acts:acts,dayMin:dayMin,n:wev.length,nWork:wk.length,nCub:cub,
           worker:worker||null,nDias:Object.keys(dias).length,
           totMin:dayMin.reduce(function(s,m){return s+m;},0)};
 }
@@ -975,8 +974,9 @@ function _planSemanaCss(){
     +'.ps th,.ps td{border:1px solid #dbe2ea;vertical-align:top;padding:4px}'
     +'.ps thead th{background:#f1f5f9;text-align:center;font-size:11px;font-weight:700;color:#0f172a;padding:6px 4px}'
     +'.ps thead th span{display:block;font-weight:400;font-size:9px;color:#64748b;margin-top:1px}'
-    +'.ps th.ps-rh{width:104px;background:#f8fafc;text-align:left;font-size:11px;font-weight:700;color:#0f172a;vertical-align:middle}'
-    +'.ps-rht{display:block;font-weight:600;font-size:9.5px;color:#64748b;font-variant-numeric:tabular-nums;margin-top:1px}'
+    +'.ps th.ps-rh{width:112px;background:#f8fafc;text-align:left;font-size:11px;font-weight:700;color:#0f172a;vertical-align:middle}'
+    +'.ps-rhh{display:block;font-weight:800;font-size:11px;color:#0f172a;font-variant-numeric:tabular-nums;white-space:nowrap}'
+    +'.ps-rha{display:block;font-weight:600;font-size:9.5px;color:#64748b;margin-top:1px}'
     +'.ps thead th.ps-hoy,.ps td.ps-hoy{background:#fffbeb}'
     +'.ps td.ps-vac{background:#fcfcfd}'
     +'.ps-ev{border-left:3px solid #94a3b8;border-radius:5px;padding:3px 5px;margin-bottom:3px;font-size:9.5px;line-height:1.28;break-inside:avoid}'
@@ -994,8 +994,8 @@ function _planSemanaCss(){
 // Leyenda de colores por trabajador (los que aparecen en la semana mostrada).
 function _planLeyendaHtml(d){
   var ws=[];
-  d.acts.forEach(function(a){
-    d.grid[a].forEach(function(c){c.forEach(function(ev){if(ws.indexOf(ev.worker)<0)ws.push(ev.worker);});});
+  d.rows.forEach(function(r){
+    r.cells.forEach(function(c){c.forEach(function(ev){if(ws.indexOf(ev.worker)<0)ws.push(ev.worker);});});
   });
   if(!ws.length)return '';
   ws.sort();
@@ -1013,33 +1013,30 @@ function _monColor(name){
       ||cfg.monitors.find(function(x){return x.name.toUpperCase()===name.toUpperCase();});
   return m&&m.color?m.color:null;
 }
-// Rejilla HTML: una fila por actividad, una columna por dia, sesiones apiladas en la celda.
+// Rejilla HTML: una fila por franja horaria (en orden cronologico), una columna por dia.
 // Fondo de casilla = color del trabajador; borde izquierdo = color de la actividad.
 function _planSemanaHtml(d){
   var info=function(id){
     return cfg.activities.find(function(x){return x.id===id;})||{label:id,color:'#f3f4f6',border:'#9ca3af',text:'#374151'};
   };
-  var h='<table class="ps"><thead><tr><th class="ps-rh">Actividad</th>';
+  var h='<table class="ps"><thead><tr><th class="ps-rh">Horario</th>';
   d.days.forEach(function(day){h+='<th'+(day.hoy?' class="ps-hoy"':'')+'>'+day.n.slice(0,3)+'<span>'+day.lbl+'</span></th>';});
   h+='</tr></thead><tbody>';
-  d.acts.forEach(function(act){
-    var a=info(act);
-    // Si todas las sesiones de la fila empiezan a la misma hora, se muestra bajo el
-    // nombre; si varian, la hora ya va en cada casilla.
-    var hh=null,mixed=false;
-    d.grid[act].forEach(function(c){c.forEach(function(ev){
-      if(hh===null)hh=ev.s;else if(hh!==ev.s)mixed=true;
-    });});
-    h+='<tr><th class="ps-rh" style="border-left:5px solid '+a.border+'">'+a.label
-      +(hh&&!mixed?'<span class="ps-rht">'+hh+'</span>':'')+'</th>';
+  d.rows.forEach(function(row){
+    var a=info(row.act);
+    // La hora manda: encabeza la fila. El nombre de la actividad va debajo.
+    h+='<tr><th class="ps-rh" style="border-left:5px solid '+a.border+'">'
+      +'<span class="ps-rhh">'+row.s+(row.mixEnd?'':'–'+row.e)+'</span>'
+      +'<span class="ps-rha">'+a.label+'</span></th>';
     for(var i=0;i<7;i++){
-      var evs=d.grid[act][i];
+      var evs=row.cells[i];
       h+='<td class="'+(d.days[i].hoy?'ps-hoy':(evs.length?'':'ps-vac'))+'">';
       evs.forEach(function(ev){
         var cub=ev.worker.toUpperCase().indexOf('CUBRIR')>=0;
         var bg=_monColor(ev.worker)||(cub?'#fff7ed':'#f1f5f9');
         h+='<div class="ps-ev'+(cub?' cub':'')+'" style="background:'+bg+';border-left-color:'+a.border+';color:#1a1a1a">'
-          +'<div class="ps-t">'+ev.s+'–'+ev.e+'</div>'
+          // La hora ya encabeza la fila; en la casilla solo se repite si el fin varia.
+          +(row.mixEnd?'<div class="ps-t">'+ev.s+'–'+ev.e+'</div>':'')
           // Con un solo trabajador seleccionado, repetir su nombre en cada celda sobra.
           +(d.worker?'':'<div class="ps-w">'+ev.worker+'</div>')
           +'<div class="ps-c">'+cLbl(ev.center)+'</div>'
@@ -1101,8 +1098,8 @@ function planSemana(){
   win.document.write(kpis+'</div>');
   win.document.write(_planSemanaHtml(d));
   if(!worker)win.document.write(_planLeyendaHtml(d));
-  win.document.write('<p class="lg">Actividades ordenadas por hora de inicio, de la mas temprana a la mas tardia. '
-    +'Cada celda: horario · '+(worker?'':'trabajador · ')+'centro. '
+  win.document.write('<p class="lg">Una fila por franja horaria, en orden cronologico de la manana a la noche: '
+    +'la jornada se lee de arriba abajo. Cada celda: '+(worker?'':'trabajador · ')+'centro. '
     +'El fondo es el color del trabajador (Config) y el borde izquierdo el de la actividad'
     +(d.nCub&&!worker?'; el recuadro naranja marca las sesiones sin cubrir.':'.')+'</p>');
   win.document.write('</body></html>');
